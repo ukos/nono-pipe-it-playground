@@ -84,6 +84,7 @@
     <h1 class="sr">PIPE IT! — Script More, Work Less</h1>
     <img class="logo" src="assets/logo.jpg" alt="PIPE IT! — Script More, Work Less">
     <button class="bigbtn" id="btn-start">▶ はじめる</button>
+    <button class="ghostbtn" id="btn-sound">🔊 音：オン</button>
     <p class="note">PowerShell のコマンドで日々の運用作業をこなすゲームです。最初は手打ち、覚えたらスクリプト化、そして自動化へ。<br>Microsoft、Windows、PowerShell は Microsoft グループの商標です。本アプリは非公式の学習ゲームで、Microsoft とは関係ありません。</p>
   </section>
 
@@ -102,7 +103,7 @@
 
   <!-- game -->
   <section id="screen-game" class="hidden">
-    <div class="bar"><button class="back" data-back="stages">← 段階</button><div><h2 id="game-title"></h2><div class="sub" id="game-sub"></div></div></div>
+    <div class="bar"><button class="back" data-back="stages">← 段階</button><div style="flex:1 1 auto"><h2 id="game-title"></h2><div class="sub" id="game-sub"></div></div><button class="back" id="btn-sound2">🔊</button></div>
     <div class="panel"><h3>依頼</h3><p id="quest-request"></p></div>
     <div class="panel"><h3>いまの環境</h3><div class="env" id="quest-env"></div></div>
     <div class="panel" id="script-panel"><h3>コマンド</h3>
@@ -508,6 +509,35 @@ const wrap = $('wrap');
 let save = { cleared:{}, scripts:{}, auto:{} };
 try { const s = localStorage.getItem('pipeit-save-v1'); if (s) save = Object.assign(save, JSON.parse(s)); } catch (e) {}
 function persist(){ try { localStorage.setItem('pipeit-save-v1', JSON.stringify(save)); } catch (e) {} }
+/* sound: thick SE only, no BGM (user decision 2026-11-26) */
+let audioCtx = null;
+function ac(){ if (save.sound === false) return null; if (!audioCtx) { try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return null; } } if (audioCtx.state === 'suspended') audioCtx.resume(); return audioCtx; }
+function tone(freq, dur, delay, type, vol, sub){
+  const ctx = ac(); if (!ctx) return;
+  const t0 = ctx.currentTime + (delay || 0);
+  const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1400; lp.connect(ctx.destination);
+  for (const det of [1, 1.006]){
+    const o = ctx.createOscillator(); o.type = type || 'triangle'; o.frequency.value = freq * det;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(vol || 0.22, t0 + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    o.connect(g); g.connect(lp); o.start(t0); o.stop(t0 + dur + 0.05);
+  }
+  if (sub) tone(freq / 2, dur, delay, 'sine', (vol || 0.22) * 0.7, false);
+}
+const seTap = () => tone(660, 0.08, 0, 'triangle', 0.18);
+const seRun = () => { tone(320, 0.1, 0, 'triangle', 0.2); tone(520, 0.12, 0.07, 'triangle', 0.2); };
+const seOk = () => { [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.16, i * 0.09, 'triangle', 0.22, true)); };
+const seNg = () => { tone(165, 0.28, 0, 'sawtooth', 0.16); tone(155, 0.28, 0, 'sawtooth', 0.16); };
+function renderSound(){
+  const on = save.sound !== false;
+  $('btn-sound').textContent = on ? '🔊 音：オン' : '🔇 音：オフ';
+  $('btn-sound2').textContent = on ? '🔊' : '🔇';
+}
+function toggleSound(){ save.sound = (save.sound === false); persist(); renderSound(); if (save.sound) seTap(); }
+$('btn-sound').addEventListener('click', toggleSound);
+$('btn-sound2').addEventListener('click', toggleSound);
 function clearedStages(themeId){ return save.cleared[themeId] || []; }
 function show(screen){
   for (const id of ['screen-title','screen-themes','screen-stages','screen-game']) $(id).classList.add('hidden');
@@ -515,7 +545,7 @@ function show(screen){
 }
 function setBg(img){ wrap.style.backgroundImage = img ? `linear-gradient(rgba(3,16,10,.45), rgba(3,16,10,.72)), url('${img}')` : 'none'; }
 
-$('btn-start').addEventListener('click', () => { renderThemes(); show('screen-themes'); });
+$('btn-start').addEventListener('click', () => { seTap(); renderThemes(); show('screen-themes'); });
 
 function renderThemes(){
   setBg('assets/bg-common.jpg');
@@ -581,7 +611,7 @@ function openQuest(q){
   const chips = $('chips'); chips.innerHTML = '';
   for (const c of q.chips){
     const b = document.createElement('button'); b.className = 'chip'; b.textContent = c;
-    b.addEventListener('click', () => insertAtCursor(c));
+    b.addEventListener('click', () => { seTap(); insertAtCursor(c); });
     chips.appendChild(b);
   }
   $('out-panel').classList.add('hidden');
@@ -622,7 +652,8 @@ function markCleared(q){
 $('btn-run').addEventListener('click', () => {
   const q = currentQuest; const src = $('cmd-input').value.trim();
   $('btn-next').classList.add('hidden');
-  if (!src){ feedback('コマンドが入力されていません。', false); return; }
+  if (!src){ seNg(); feedback('コマンドが入力されていません。', false); return; }
+  seRun();
   // display run
   const dispEnv = makeEnv(); const dispCtx = newCtx();
   try {
@@ -630,6 +661,7 @@ $('btn-run').addEventListener('click', () => {
     runProgram(src, dispEnv, dispCtx);
   } catch (e) {
     $('out-panel').classList.add('hidden');
+    seNg();
     feedback('実行エラー： ' + e.message, false);
     return;
   }
@@ -649,14 +681,18 @@ $('btn-run').addEventListener('click', () => {
   const r = judge(q, src, preload);
   if (r.pass){
     markCleared(q);
+    seOk();
     feedback('✔ クリア！ 依頼どおりの結果になりました。', true);
     const next = QUESTS.find(x => x.theme === q.theme && x.stage === q.stage + 1);
     if (next){ const b = $('btn-next'); b.classList.remove('hidden'); b.onclick = () => openQuest(next); }
   } else if (!r.funcOk){
+    seNg();
     feedback('関数の形になっていません。function で OldFileCleanup を定義し、呼び出すところまで書いてください。', false);
   } else if (!r.outputOk){
+    seNg();
     feedback('出力が依頼と違います。対象のファイルと並び順を確認してください。', false);
   } else {
+    seNg();
     feedback('結果の状態が依頼と違います。どのファイルがどこへ行くべきか、環境と見比べてください。', false);
   }
 });
@@ -680,12 +716,15 @@ $('btn-advance').addEventListener('click', () => {
   } catch (e) { feedback('実行エラー： ' + e.message, false); return; }
   if (r.pass){
     markCleared(q);
+    seOk();
     feedback('✔ クリア！ 登録したスクリプトが自動で片付けてくれました。このテーマは自動化済みです。', true);
     $('btn-advance').classList.add('hidden');
   } else {
+    seNg();
     feedback('自動実行後の状態が依頼と違います。登録した日数と、関数の動きを確認してください。', false);
   }
 });
+renderSound();
 setBg('assets/bg-common.jpg');
 </script>
 </body>
