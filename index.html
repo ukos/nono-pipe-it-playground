@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>PIPE IT! — Script More, Work Less</title>
+<meta name="description" content="PIPE IT! — PowerShellで運用作業をこなし、スクリプトで自動化していくゲーム。">
+<link rel="icon" type="image/png" sizes="32x32" href="assets/appicon-32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="assets/appicon-180.png">
+<style>
+  :root{
+    --bg:#04150e; --panel:rgba(8,38,24,.92); --panel2:#0a2e1c;
+    --line:#2c7a4b; --ink:#f2f7e8; --sub:#a8c8a0;
+    --yellow:#ffe81a; --lime:#b6e62e; --green:#37c978; --red:#ff7a6b;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+  html,body{margin:0;padding:0;background:#020a06}
+  body{font-family:"Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif;color:var(--ink)}
+  .wrap{max-width:480px;margin:0 auto;min-height:100dvh;position:relative;
+    padding:calc(14px + env(safe-area-inset-top)) 14px calc(24px + env(safe-area-inset-bottom));
+    background-size:cover;background-position:top center;background-repeat:no-repeat}
+  .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+  /* title */
+  #screen-title{text-align:center;padding-top:8dvh}
+  #screen-title img.logo{width:min(88%,360px);height:auto;display:block;margin:0 auto}
+  .bigbtn{display:block;width:100%;margin:14px 0 0;padding:16px 14px;font-size:17px;font-weight:800;
+    text-align:left;color:#081c10;background:linear-gradient(180deg,var(--yellow),var(--lime));
+    border:0;border-radius:12px;cursor:pointer}
+  .bigbtn:active{filter:brightness(1.1)}
+  .ghostbtn{display:block;width:100%;margin:10px 0 0;padding:14px;font-size:15px;font-weight:700;
+    text-align:left;color:var(--ink);background:var(--panel);border:2px solid var(--line);border-radius:12px;cursor:pointer}
+  .ghostbtn:disabled{opacity:.45;cursor:default}
+  .note{font-size:11.5px;color:var(--sub);line-height:1.7;margin-top:18px}
+  /* headers */
+  .bar{display:flex;align-items:center;gap:10px;margin:2px 0 12px}
+  .back{flex:0 0 auto;background:var(--panel);color:var(--ink);border:2px solid var(--line);
+    border-radius:10px;padding:8px 12px;font-size:14px;font-weight:700;cursor:pointer}
+  .bar h2{margin:0;font-size:17px;line-height:1.3}
+  .bar .sub{font-size:12px;color:var(--sub)}
+  /* theme / stage lists */
+  .tbtn{display:flex;width:100%;align-items:center;gap:12px;margin:10px 0;padding:12px 14px;
+    background:var(--panel);border:2px solid var(--line);border-radius:12px;cursor:pointer;color:var(--ink);text-align:left}
+  .tbtn:disabled{opacity:.5;cursor:default}
+  .tbtn img{width:44px;height:44px;object-fit:contain;flex:0 0 auto}
+  .tbtn .tt{flex:1 1 auto;min-width:0}
+  .tbtn .tt b{display:block;font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .tbtn .tt span{font-size:12px;color:var(--sub)}
+  .badge{flex:0 0 auto;font-size:11px;font-weight:800;color:#081c10;background:var(--lime);
+    border-radius:999px;padding:4px 10px;white-space:nowrap}
+  .badge.dim{background:#37503f;color:var(--sub)}
+  .dots{font-size:12px;color:var(--yellow);letter-spacing:2px;white-space:nowrap}
+  /* game */
+  .panel{background:var(--panel);border:2px solid var(--line);border-radius:12px;padding:12px 14px;margin:10px 0}
+  .panel h3{margin:0 0 6px;font-size:13px;color:var(--lime);letter-spacing:.08em}
+  .panel p{margin:0;font-size:14px;line-height:1.75}
+  .env{font-size:12.5px;line-height:1.5}
+  .env .folder{margin:8px 0 2px;font-weight:800;color:var(--yellow);font-size:13px}
+  .env table{width:100%;border-collapse:collapse}
+  .env td{padding:3px 4px;border-bottom:1px solid rgba(60,140,90,.35);vertical-align:middle}
+  .env td.n{word-break:break-all}
+  .env td.r{text-align:right;white-space:nowrap;color:var(--sub)}
+  .env img{width:22px;height:22px;object-fit:contain;vertical-align:middle}
+  .env .empty{color:var(--sub);padding:2px 4px}
+  textarea{width:100%;min-height:76px;background:#03130b;color:#eaffea;border:2px solid var(--line);
+    border-radius:10px;padding:10px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:14.5px;line-height:1.6;resize:vertical}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 0}
+  .chip{background:var(--panel2);color:var(--ink);border:1.5px solid var(--line);border-radius:999px;
+    padding:6px 11px;font-size:13px;font-family:ui-monospace,Menlo,Consolas,monospace;cursor:pointer}
+  .chip:active{background:var(--line)}
+  .out{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;line-height:1.7;white-space:pre-wrap;word-break:break-all}
+  .out .dim{color:var(--sub)}
+  .feedback{font-size:14.5px;line-height:1.7}
+  .feedback.ok{color:var(--lime);font-weight:700}
+  .feedback.ng{color:var(--red)}
+  .hidden{display:none}
+  footer{margin-top:22px;text-align:center;color:var(--sub);font-size:11px;line-height:1.8}
+</style>
+</head>
+<body>
+<div class="wrap" id="wrap">
+
+  <!-- title -->
+  <section id="screen-title">
+    <h1 class="sr">PIPE IT! — Script More, Work Less</h1>
+    <img class="logo" src="assets/logo.jpg" alt="PIPE IT! — Script More, Work Less">
+    <button class="bigbtn" id="btn-start">▶ はじめる</button>
+    <p class="note">PowerShell のコマンドで日々の運用作業をこなすゲームです。最初は手打ち、覚えたらスクリプト化、そして自動化へ。<br>Microsoft、Windows、PowerShell は Microsoft グループの商標です。本アプリは非公式の学習ゲームで、Microsoft とは関係ありません。</p>
+  </section>
+
+  <!-- themes -->
+  <section id="screen-themes" class="hidden">
+    <div class="bar"><h2>業務テーマを選ぶ</h2></div>
+    <div id="theme-list"></div>
+    <footer>クリアした段階は端末に保存されます</footer>
+  </section>
+
+  <!-- stages -->
+  <section id="screen-stages" class="hidden">
+    <div class="bar"><button class="back" data-back="themes">← テーマ</button><div><h2 id="stage-theme-name"></h2><div class="sub">段階を選ぶ</div></div></div>
+    <div id="stage-list"></div>
+  </section>
+
+  <!-- game -->
+  <section id="screen-game" class="hidden">
+    <div class="bar"><button class="back" data-back="stages">← 段階</button><div><h2 id="game-title"></h2><div class="sub" id="game-sub"></div></div></div>
+    <div class="panel"><h3>依頼</h3><p id="quest-request"></p></div>
+    <div class="panel"><h3>いまの環境</h3><div class="env" id="quest-env"></div></div>
+    <div class="panel" id="script-panel"><h3>コマンド</h3>
+      <textarea id="cmd-input" spellcheck="false" placeholder="ここにコマンドを入力"></textarea>
+      <div class="chips" id="chips"></div>
+      <button class="bigbtn" id="btn-run">▶ 実行する</button>
+      <button class="bigbtn hidden" id="btn-advance" style="background:linear-gradient(180deg,#8be04e,#37c978)">▶▶ 1か月進める（自動実行）</button>
+    </div>
+    <div class="panel hidden" id="out-panel"><h3>出力</h3><div class="out" id="out-text"></div></div>
+    <div class="panel hidden" id="feedback-panel"><div class="feedback" id="feedback-text"></div>
+      <button class="bigbtn hidden" id="btn-next">▶ 次の段階へ</button>
+    </div>
+  </section>
+
+</div>
+<script id="core">
+'use strict';
+/* ================= data ================= */
+const FOLDERS = ['Downloads', 'Archive', 'Trash'];
+function baseFiles(){ return [
+  {Name:'見積書_2025.xlsx',   Length:240,  LastWriteTime:12,  Extension:'.xlsx'},
+  {Name:'会議メモ.txt',       Length:8,    LastWriteTime:3,   Extension:'.txt'},
+  {Name:'setup_cache.tmp',    Length:1500, LastWriteTime:120, Extension:'.tmp'},
+  {Name:'写真_旅行.jpg',      Length:3200, LastWriteTime:45,  Extension:'.jpg'},
+  {Name:'temp_work.tmp',      Length:64,   LastWriteTime:200, Extension:'.tmp'},
+  {Name:'報告書_第1四半期.docx', Length:380, LastWriteTime:210, Extension:'.docx'},
+  {Name:'backup_old.zip',     Length:5200, LastWriteTime:400, Extension:'.zip'},
+  {Name:'download_partial.tmp', Length:890, LastWriteTime:30, Extension:'.tmp'},
+  {Name:'音楽サンプル.mp3',   Length:4100, LastWriteTime:15,  Extension:'.mp3'},
+  {Name:'old_notes.txt',      Length:22,   LastWriteTime:190, Extension:'.txt'},
+  {Name:'設計図_v2.pdf',      Length:760,  LastWriteTime:95,  Extension:'.pdf'},
+  {Name:'cache2.tmp',         Length:45,   LastWriteTime:95,  Extension:'.tmp'}
+];}
+function makeEnv(){
+  const env = {Downloads:[], Archive:[], Trash:[]};
+  for (const f of baseFiles()) env.Downloads.push(Object.assign({}, f, {Folder:'Downloads'}));
+  return env;
+}
+const THEMES = [
+  {id:'files',   name:'ファイル整理',           icon:'assets/obj-folder.png',  bg:'assets/bg-files.jpg',   ready:true},
+  {id:'log',     name:'ログ調査',               icon:'assets/obj-log.png',     bg:'assets/bg-log.jpg',     ready:false},
+  {id:'disk',    name:'ディスク棚卸し',         icon:'assets/obj-disk.png',    bg:'assets/bg-disk.jpg',    ready:false},
+  {id:'process', name:'プロセス・サービス監視', icon:'assets/obj-gear.png',    bg:'assets/bg-process.jpg', ready:false},
+  {id:'users',   name:'ユーザーアカウント管理', icon:'assets/obj-idbadge.png', bg:'assets/bg-users.jpg',   ready:false},
+  {id:'backup',  name:'バックアップ運用',       icon:'assets/obj-tape.png',    bg:'assets/bg-backup.jpg',  ready:false},
+  {id:'network', name:'ネットワーク疎通確認',   icon:'assets/obj-router.png',  bg:'assets/bg-network.jpg', ready:false},
+  {id:'software',name:'ソフトウェア棚卸し',     icon:'assets/obj-software.png',bg:'assets/bg-software.jpg',ready:false},
+  {id:'events',  name:'イベントログ監視',       icon:'assets/obj-warning.png', bg:'assets/bg-events.jpg',  ready:false},
+  {id:'report',  name:'定例レポート作成',       icon:'assets/obj-report.png',  bg:'assets/bg-report.jpg',  ready:false}
+];
+const STAGE_NAMES = ['単発コマンド','パイプライン','条件分岐・繰り返し','関数化・スクリプト化','自動実行'];
+const QUESTS = [
+  { id:'files-1', theme:'files', stage:1, title:'フォルダの中身を一覧する',
+    request:'情シス担当の先輩から。「Downloads フォルダに何が入っているか、まず中身を全部見せてくれ」',
+    solution:'Get-ChildItem Downloads', judge:'output',
+    chips:['Get-ChildItem','Downloads','Archive','Trash'] },
+  { id:'files-2', theme:'files', stage:2, title:'大きいファイルを大きい順に',
+    request:'「容量を食っているのはどれだ。100KB より大きいファイルだけを、大きい順に並べて見せてくれ」',
+    solution:'Get-ChildItem Downloads | Where-Object { $_.Length -gt 100 } | Sort-Object Length -Descending', judge:'output',
+    chips:['Get-ChildItem','Downloads','|','Where-Object','{','}','$_','.Length','-gt','100','Sort-Object','-Descending'] },
+  { id:'files-3', theme:'files', stage:3, title:'古い一時ファイルをゴミ箱へ',
+    request:'「90日以上前の .tmp ファイルはゴミ箱（Trash）へ移動してくれ。最近のものは消さないようにな」',
+    solution:"Get-ChildItem Downloads | Where-Object { $_.Extension -eq '.tmp' -and $_.LastWriteTime -ge 90 } | Move-Item -Destination Trash", judge:'state',
+    chips:['Get-ChildItem','Downloads','|','Where-Object','{','}','$_','.Extension','-eq',"'.tmp'",'-and','.LastWriteTime','-ge','90','Move-Item','-Destination','Trash'] },
+  { id:'files-4', theme:'files', stage:4, title:'片付けを関数にする',
+    request:'「この片付けは毎月あるんだ。使い回せるよう関数にしてくれ。名前は OldFileCleanup、日数は引数 $Days で受け取って、古いファイルを Archive へ移動する動きで。作ったら 180日 で実行してくれ」',
+    solution:'function OldFileCleanup($Days) { Get-ChildItem Downloads | Where-Object { $_.LastWriteTime -ge $Days } | Move-Item -Destination Archive }\nOldFileCleanup 180',
+    judge:'state', requireFunction:'OldFileCleanup',
+    chips:['function','OldFileCleanup','($Days)','{','}','Get-ChildItem','Downloads','|','Where-Object','$_','.LastWriteTime','-ge','$Days','Move-Item','-Destination','Archive','180'] },
+  { id:'files-5', theme:'files', stage:5, title:'毎月の自動実行に登録する',
+    request:'「段階4で作った関数 OldFileCleanup を、毎月の自動実行に登録しよう。ゲーム内コマンド Register-AutoRun で、90日を対象に登録してくれ。登録したら『1か月進める』で翌月まで進め、自動で片付くか確かめよう」',
+    solution:'Register-AutoRun OldFileCleanup -Days 90', judge:'state',
+    preload:'function OldFileCleanup($Days) { Get-ChildItem Downloads | Where-Object { $_.LastWriteTime -ge $Days } | Move-Item -Destination Archive }',
+    sim:{ days:30, arrivals:[
+      {Name:'作業中メモ.txt', Length:6,   LastWriteTime:2,   Extension:'.txt'},
+      {Name:'work_tmp.tmp',   Length:300, LastWriteTime:40,  Extension:'.tmp'},
+      {Name:'共有資料.pdf',   Length:500, LastWriteTime:120, Extension:'.pdf'}
+    ]},
+    chips:['Register-AutoRun','OldFileCleanup','-Days','90'] }
+];
+
+/* ================= interpreter ================= */
+function tokenize(src){
+  const toks = []; let i = 0;
+  while (i < src.length){
+    const c = src[i];
+    if (c === ' ' || c === '\t' || c === '\r'){ i++; continue; }
+    if (c === '\n' || c === ';'){ toks.push({t:'sep'}); i++; continue; }
+    if (c === '|'){ toks.push({t:'pipe'}); i++; continue; }
+    if (c === '{' || c === '}' || c === '(' || c === ')' || c === ','){ toks.push({t:c}); i++; continue; }
+    if (c === '.' && !/[0-9]/.test(src[i+1] || '')){ toks.push({t:'.'}); i++; continue; }
+    if (c === "'" || c === '"'){ let j = i + 1, s = ''; while (j < src.length && src[j] !== c){ s += src[j]; j++; }
+      if (j >= src.length) throw new Error('文字列が閉じていません'); toks.push({t:'str', v:s}); i = j + 1; continue; }
+    if (c === '$'){ let j = i + 1, nm = ''; while (j < src.length && /[A-Za-z0-9_]/.test(src[j])){ nm += src[j]; j++; }
+      toks.push({t:'var', v:nm}); i = j; continue; }
+    if (c === '-' && /[A-Za-z]/.test(src[i+1] || '')){ let j = i + 1, nm = '-'; while (j < src.length && /[A-Za-z]/.test(src[j])){ nm += src[j]; j++; }
+      toks.push({t:'param', v:nm}); i = j; continue; }
+    if (/[0-9]/.test(c) || (c === '.' && /[0-9]/.test(src[i+1] || ''))){ let j = i, num = ''; while (j < src.length && /[0-9.]/.test(src[j])){ num += src[j]; j++; }
+      toks.push({t:'num', v:parseFloat(num)}); i = j; continue; }
+    if (/[A-Za-z_]/.test(c)){ let j = i, w = ''; while (j < src.length && /[A-Za-z0-9_-]/.test(src[j])){ w += src[j]; j++; }
+      toks.push({t:'word', v:w}); i = j; continue; }
+    throw new Error('読み取れない文字があります: ' + c);
+  }
+  return toks;
+}
+class Cur {
+  constructor(toks){ this.toks = toks; this.i = 0; }
+  peek(){ return this.toks[this.i]; }
+  next(){ return this.toks[this.i++]; }
+  done(){ return this.i >= this.toks.length; }
+}
+function captureBlock(cur){
+  cur.expectOpen();
+  const out = []; let depth = 1;
+  while (!cur.done()){
+    const tk = cur.next();
+    if (tk.t === '{') depth++;
+    if (tk.t === '}'){ depth--; if (depth === 0) return out; }
+    out.push(tk);
+  }
+  throw new Error('{ に対応する } がありません');
+}
+Cur.prototype.expectOpen = function(){ const tk = this.next(); if (!tk || tk.t !== '{') throw new Error('{ が必要です'); };
+
+function newCtx(){ return { functions:{}, vars:{}, autoRun:null, output:[] }; }
+
+function runProgram(src, env, ctx){
+  const cur = new Cur(tokenize(src));
+  runStatements(cur, env, ctx, null);
+  return ctx;
+}
+function runStatements(cur, env, ctx, input){
+  let value = input;
+  while (!cur.done()){
+    const tk = cur.peek();
+    if (tk.t === 'sep'){ cur.next(); continue; }
+    if (tk.t === '}') break;
+    if (tk.t === 'word' && tk.v.toLowerCase() === 'function'){ parseFunctionDef(cur, ctx); value = []; continue; }
+    value = parsePipeline(cur, env, ctx, value);
+    ctx.output = value;
+    const nx = cur.peek();
+    if (nx && nx.t !== 'sep' && nx.t !== '}') throw new Error('文の区切りが分かりません');
+  }
+  return value;
+}
+function parseFunctionDef(cur, ctx){
+  cur.next(); // 'function'
+  const nameTk = cur.next();
+  if (!nameTk || nameTk.t !== 'word') throw new Error('関数名が必要です');
+  const open = cur.next(); if (!open || open.t !== '(') throw new Error('関数の引数には ( ) が必要です');
+  const params = [];
+  while (!cur.done() && cur.peek().t !== ')'){
+    const tk = cur.next();
+    if (tk.t === 'var') params.push(tk.v);
+    else if (tk.t !== ',') throw new Error('引数の書き方が分かりません');
+  }
+  cur.next(); // ')'
+  const body = captureBlock(cur);
+  ctx.functions[nameTk.v] = { params, body };
+}
+function parsePipeline(cur, env, ctx, input){
+  let value = execStage(cur, env, ctx, input);
+  while (cur.peek() && cur.peek().t === 'pipe'){ cur.next(); value = execStage(cur, env, ctx, value); }
+  return value;
+}
+const SWITCH_PARAMS = ['-Descending', '-Recurse'];
+function execStage(cur, env, ctx, input){
+  const nameTk = cur.next();
+  if (!nameTk || nameTk.t !== 'word') throw new Error('コマンド名が必要です');
+  const name = nameTk.v;
+  const positional = []; const params = {}; let block = null;
+  while (!cur.done()){
+    const tk = cur.peek();
+    if (tk.t === 'pipe' || tk.t === 'sep' || tk.t === '}') break;
+    if (tk.t === '{'){ block = captureBlock(cur); continue; }
+    if (tk.t === 'param'){
+      cur.next();
+      if (SWITCH_PARAMS.includes(tk.v)){ params[tk.v] = true; continue; }
+      const nx = cur.peek();
+      if (nx && (nx.t === 'word' || nx.t === 'str' || nx.t === 'num')){ cur.next(); params[tk.v] = nx.v; continue; }
+      if (nx && nx.t === 'var'){ cur.next(); params[tk.v] = resolveVar(nx, null, ctx, cur); continue; }
+      params[tk.v] = true; continue;
+    }
+    if (tk.t === 'word' || tk.t === 'str' || tk.t === 'num'){ cur.next(); positional.push(tk.v); continue; }
+    if (tk.t === 'var'){ cur.next(); positional.push(resolveVar(tk, null, ctx, cur)); continue; }
+    if (tk.t === '.'){ cur.next(); const w = cur.next(); positional.push('.' + (w ? w.v : '')); continue; }
+    throw new Error('引数の読み取りで止まりました');
+  }
+  return dispatch(name, positional, params, block, input, env, ctx);
+}
+function resolveVar(tk, item, ctx, cur){
+  let base;
+  if (tk.v === '_') base = (ctx.currentItem !== undefined ? ctx.currentItem : item);
+  else base = ctx.vars[tk.v];
+  while (cur && cur.peek() && cur.peek().t === '.'){
+    cur.next(); const w = cur.next();
+    if (w && w.t === 'word') base = (base == null ? undefined : base[w.v]);
+  }
+  return base;
+}
+function dispatch(name, positional, params, block, input, env, ctx){
+  const lower = name.toLowerCase();
+  const items = Array.isArray(input) ? input : (input == null ? [] : [input]);
+  if (lower === 'get-childitem' || lower === 'gci' || lower === 'dir' || lower === 'ls'){
+    const folder = (positional[0] !== undefined ? positional[0] : (params['-Path'] !== undefined ? params['-Path'] : 'Downloads'));
+    if (!FOLDERS.includes(folder)) throw new Error('フォルダ "' + folder + '" はありません（Downloads / Archive / Trash）');
+    return env[folder].slice();
+  }
+  if (lower === 'where-object'){
+    if (!block) throw new Error('Where-Object には { 条件 } が必要です');
+    return items.filter(it => evalCond(block, it, ctx));
+  }
+  if (lower === 'foreach-object'){
+    if (!block) throw new Error('ForEach-Object には { 処理 } が必要です');
+    const out = [];
+    for (const it of items){
+      const saved = ctx.currentItem; ctx.currentItem = it;
+      const v = runStatements(new Cur(block), env, ctx, [it]);
+      ctx.currentItem = saved;
+      if (Array.isArray(v)) out.push(...v);
+    }
+    return out;
+  }
+  if (lower === 'sort-object'){
+    const prop = (positional[0] !== undefined ? positional[0] : (params['-Property'] !== undefined ? params['-Property'] : 'Name'));
+    const desc = params['-Descending'] === true;
+    return items.slice().sort((a, b) => {
+      const x = a[prop], y = b[prop];
+      let r;
+      if (typeof x === 'number' && typeof y === 'number') r = x - y;
+      else r = String(x).localeCompare(String(y), 'ja');
+      return desc ? -r : r;
+    });
+  }
+  if (lower === 'select-object'){
+    if (params['-First'] !== undefined) return items.slice(0, Number(params['-First']));
+    return items.slice();
+  }
+  if (lower === 'measure-object'){
+    return [{ _count: items.length }];
+  }
+  if (lower === 'move-item'){
+    const dest = params['-Destination'];
+    if (!FOLDERS.includes(dest)) throw new Error('移動先は -Destination でフォルダを指定してください（Downloads / Archive / Trash）');
+    for (const it of items){
+      if (!it || typeof it !== 'object' || !('Folder' in it)) continue;
+      const srcArr = env[it.Folder]; const idx = srcArr.indexOf(it);
+      if (idx >= 0) srcArr.splice(idx, 1);
+      it.Folder = dest; env[dest].push(it);
+    }
+    return [];
+  }
+  if (lower === 'remove-item'){
+    for (const it of items){
+      if (!it || typeof it !== 'object' || !('Folder' in it)) continue;
+      const arr = env[it.Folder]; const idx = arr.indexOf(it);
+      if (idx >= 0) arr.splice(idx, 1);
+    }
+    return [];
+  }
+  if (lower === 'register-autorun'){
+    const func = positional[0];
+    if (!func) throw new Error('Register-AutoRun には関数名が必要です');
+    ctx.autoRun = { func, days: Number(params['-Days'] || 0) };
+    return [];
+  }
+  if (ctx.functions[name]){
+    return invokeFunction(ctx, env, name, positional);
+  }
+  throw new Error('コマンド "' + name + '" はこのゲームでは使えません');
+}
+function invokeFunction(ctx, env, name, args){
+  const fn = ctx.functions[name];
+  if (!fn) throw new Error('関数 "' + name + '" が見つかりません');
+  const savedVars = ctx.vars;
+  ctx.vars = Object.assign({}, savedVars);
+  fn.params.forEach((p, i) => { ctx.vars[p] = args[i]; });
+  const v = runStatements(new Cur(fn.body), env, ctx, null);
+  ctx.vars = savedVars;
+  return v;
+}
+/* conditions */
+function evalCond(toks, item, ctx){
+  const cur = new Cur(toks);
+  const saved = ctx.currentItem; ctx.currentItem = item;
+  const v = parseOr(cur, ctx);
+  ctx.currentItem = saved;
+  return !!v;
+}
+function parseOr(cur, ctx){
+  let l = parseAnd(cur, ctx);
+  while (cur.peek() && cur.peek().t === 'param' && cur.peek().v === '-or'){ cur.next(); const r = parseAnd(cur, ctx); l = !!l || !!r; }
+  return l;
+}
+function parseAnd(cur, ctx){
+  let l = parseCmp(cur, ctx);
+  while (cur.peek() && cur.peek().t === 'param' && cur.peek().v === '-and'){ cur.next(); const r = parseCmp(cur, ctx); l = !!l && !!r; }
+  return l;
+}
+const COMP_OPS = ['-gt','-ge','-lt','-le','-eq','-ne'];
+function parseCmp(cur, ctx){
+  const l = parseOperand(cur, ctx);
+  const tk = cur.peek();
+  if (tk && tk.t === 'param' && COMP_OPS.includes(tk.v)){
+    cur.next(); const r = parseOperand(cur, ctx);
+    return compareVals(l, tk.v, r);
+  }
+  return l;
+}
+function parseOperand(cur, ctx){
+  const tk = cur.next();
+  if (!tk) throw new Error('条件の右側がありません');
+  if (tk.t === '('){ const v = parseOr(cur, ctx); const close = cur.next(); if (!close || close.t !== ')') throw new Error(') が必要です'); return v; }
+  if (tk.t === 'num' || tk.t === 'str') return tk.v;
+  if (tk.t === 'word') return tk.v;
+  if (tk.t === '.'){ const w = cur.next(); return '.' + (w ? w.v : ''); }
+  if (tk.t === 'var'){
+    let base = (tk.v === '_') ? ctx.currentItem : ctx.vars[tk.v];
+    while (cur.peek() && cur.peek().t === '.'){
+      cur.next(); const w = cur.next();
+      if (w && w.t === 'word') base = (base == null ? undefined : base[w.v]);
+    }
+    return base;
+  }
+  throw new Error('条件の読み取りで止まりました');
+}
+function compareVals(l, op, r){
+  if (typeof l === 'number' && typeof r === 'number'){
+    switch (op){ case '-gt': return l > r; case '-ge': return l >= r; case '-lt': return l < r; case '-le': return l <= r; case '-eq': return l === r; case '-ne': return l !== r; }
+  }
+  const a = String(l).toLowerCase(), b = String(r).toLowerCase();
+  switch (op){ case '-eq': return a === b; case '-ne': return a !== b; case '-gt': return a > b; case '-ge': return a >= b; case '-lt': return a < b; case '-le': return a <= b; }
+  return false;
+}
+/* simulation & judging */
+function advanceTime(env, days, arrivals){
+  for (const f of FOLDERS) for (const file of env[f]) file.LastWriteTime += days;
+  for (const a of arrivals || []) env.Downloads.push(Object.assign({}, a, {Folder:'Downloads'}));
+}
+function simulate(quest, env, ctx){
+  advanceTime(env, quest.sim.days, quest.sim.arrivals);
+  if (ctx.autoRun) invokeFunction(ctx, env, ctx.autoRun.func, [ctx.autoRun.days]);
+}
+function stateSnapshot(env){
+  const o = {};
+  for (const f of FOLDERS) o[f] = env[f].map(x => x.Name).slice().sort();
+  return o;
+}
+function outputSignature(output){
+  return (output || []).map(it => {
+    if (it && typeof it === 'object' && '_count' in it) return 'Count=' + it._count;
+    if (it && typeof it === 'object' && 'Name' in it) return it.Name;
+    return String(it);
+  });
+}
+function loadDefs(src, env, ctx){
+  const cur = new Cur(tokenize(src));
+  while (!cur.done()){
+    const tk = cur.peek();
+    if (tk.t === 'sep'){ cur.next(); continue; }
+    if (tk.t === 'word' && tk.v.toLowerCase() === 'function'){ parseFunctionDef(cur, ctx); continue; }
+    let depth = 0;
+    while (!cur.done()){
+      const t2 = cur.peek();
+      if (t2.t === '{') depth++;
+      if (t2.t === '}') depth--;
+      if (depth === 0 && t2.t === 'sep') break;
+      cur.next();
+    }
+  }
+}
+function attempt(quest, src, preloadSrc){
+  const env = makeEnv(); const ctx = newCtx();
+  let err = null;
+  try {
+    if (preloadSrc) loadDefs(preloadSrc, env, ctx);
+    runProgram(src, env, ctx);
+    if (quest.sim) simulate(quest, env, ctx);
+  } catch (e) { err = e.message; }
+  return { env, ctx, err };
+}
+function judge(quest, playerSrc, playerPreloadSrc){
+  const exp = attempt(quest, quest.solution, quest.preload || null);
+  const got = attempt(quest, playerSrc, playerPreloadSrc !== undefined ? playerPreloadSrc : (quest.preload || null));
+  const result = { pass:false, err:got.err, funcOk:true, outputOk:true, stateOk:true };
+  if (got.err) return result;
+  if (quest.requireFunction && !got.ctx.functions[quest.requireFunction]) result.funcOk = false;
+  if (quest.judge === 'output'){
+    result.outputOk = JSON.stringify(outputSignature(exp.ctx.output)) === JSON.stringify(outputSignature(got.ctx.output));
+  }
+  if (quest.judge === 'state'){
+    result.stateOk = JSON.stringify(stateSnapshot(exp.env)) === JSON.stringify(stateSnapshot(got.env));
+  }
+  result.pass = result.funcOk && result.outputOk && result.stateOk;
+  return result;
+}
+</script>
+<script>
+'use strict';
+/* ================= UI ================= */
+const $ = id => document.getElementById(id);
+const wrap = $('wrap');
+let save = { cleared:{}, scripts:{}, auto:{} };
+try { const s = localStorage.getItem('pipeit-save-v1'); if (s) save = Object.assign(save, JSON.parse(s)); } catch (e) {}
+function persist(){ try { localStorage.setItem('pipeit-save-v1', JSON.stringify(save)); } catch (e) {} }
+function clearedStages(themeId){ return save.cleared[themeId] || []; }
+function show(screen){
+  for (const id of ['screen-title','screen-themes','screen-stages','screen-game']) $(id).classList.add('hidden');
+  $(screen).classList.remove('hidden');
+}
+function setBg(img){ wrap.style.backgroundImage = img ? `linear-gradient(rgba(3,16,10,.45), rgba(3,16,10,.72)), url('${img}')` : 'none'; }
+
+$('btn-start').addEventListener('click', () => { renderThemes(); show('screen-themes'); });
+
+function renderThemes(){
+  setBg('assets/bg-common.jpg');
+  const list = $('theme-list'); list.innerHTML = '';
+  for (const th of THEMES){
+    const btn = document.createElement('button'); btn.className = 'tbtn';
+    const cleared = clearedStages(th.id);
+    let right;
+    if (!th.ready) right = '<span class="badge dim">準備中</span>';
+    else if (save.auto[th.id]) right = '<span class="badge">自動化済み</span>';
+    else right = '<span class="dots">' + [1,2,3,4,5].map(n => cleared.includes(n) ? '●' : '○').join('') + '</span>';
+    btn.innerHTML = `<img src="${th.icon}" alt=""><span class="tt"><b>${th.name}</b><span>${th.ready ? '全5段階' : 'これから追加されます'}</span></span>${right}`;
+    btn.disabled = !th.ready;
+    if (th.ready) btn.addEventListener('click', () => { renderStages(th); show('screen-stages'); });
+    list.appendChild(btn);
+  }
+}
+let currentTheme = null, currentQuest = null;
+function renderStages(th){
+  currentTheme = th; setBg(th.bg);
+  $('stage-theme-name').textContent = th.name;
+  const list = $('stage-list'); list.innerHTML = '';
+  const cleared = clearedStages(th.id);
+  QUESTS.filter(q => q.theme === th.id).forEach(q => {
+    const btn = document.createElement('button'); btn.className = 'tbtn';
+    const unlocked = q.stage === 1 || cleared.includes(q.stage - 1);
+    const done = cleared.includes(q.stage);
+    btn.innerHTML = `<span class="tt"><b>段階${q.stage}： ${q.title}</b><span>${STAGE_NAMES[q.stage - 1]}</span></span>` +
+      (done ? '<span class="badge">クリア</span>' : (unlocked ? '' : '<span class="badge dim">ロック中</span>'));
+    btn.disabled = !unlocked;
+    if (unlocked) btn.addEventListener('click', () => openQuest(q));
+    list.appendChild(btn);
+  });
+}
+document.querySelectorAll('[data-back]').forEach(b => b.addEventListener('click', () => {
+  const to = b.getAttribute('data-back');
+  if (to === 'themes'){ renderThemes(); show('screen-themes'); }
+  if (to === 'stages'){ renderStages(currentTheme); show('screen-stages'); }
+}));
+
+function envHtml(env){
+  let h = '';
+  for (const f of FOLDERS){
+    h += `<div class="folder">📁 ${f}</div>`;
+    if (!env[f].length) h += '<div class="empty">（空です）</div>';
+    else {
+      h += '<table>' + env[f].map(x =>
+        `<tr><td style="width:26px"><img src="assets/obj-file.png" alt=""></td><td class="n">${x.Name}</td><td class="r">${x.Length} KB</td><td class="r">${x.LastWriteTime}日前</td></tr>`).join('') + '</table>';
+    }
+  }
+  return h;
+}
+function openQuest(q){
+  currentQuest = q;
+  setBg(currentTheme.bg);
+  $('game-title').textContent = `段階${q.stage}： ${q.title}`;
+  $('game-sub').textContent = `${currentTheme.name} ／ ${STAGE_NAMES[q.stage - 1]}`;
+  let req = q.request;
+  if (q.stage === 5 && save.scripts.files) req += '<br><span style="color:var(--sub);font-size:12.5px">保存済みスクリプト： 段階4で作った OldFileCleanup が読み込まれています。</span>';
+  $('quest-request').innerHTML = req;
+  $('quest-env').innerHTML = envHtml(makeEnv());
+  const input = $('cmd-input'); input.value = (q.stage === 4 && save.scripts.files) ? save.scripts.files : '';
+  const chips = $('chips'); chips.innerHTML = '';
+  for (const c of q.chips){
+    const b = document.createElement('button'); b.className = 'chip'; b.textContent = c;
+    b.addEventListener('click', () => insertAtCursor(c));
+    chips.appendChild(b);
+  }
+  $('out-panel').classList.add('hidden');
+  $('feedback-panel').classList.add('hidden');
+  $('btn-next').classList.add('hidden');
+  $('btn-advance').classList.add('hidden');
+  show('screen-game');
+}
+function insertAtCursor(text){
+  const el = $('cmd-input');
+  const s = el.selectionStart || el.value.length, e = el.selectionEnd || el.value.length;
+  const before = el.value.slice(0, s), after = el.value.slice(e);
+  const padL = (before && !/[\s{(|]$/.test(before)) ? ' ' : '';
+  const padR = (after && !/^[\s})|]/.test(after)) ? ' ' : '';
+  el.value = before + padL + text + padR + after;
+  const pos = (before + padL + text + padR).length;
+  el.focus(); el.setSelectionRange(pos, pos);
+}
+function formatOutput(output){
+  if (!output || !output.length) return '<span class="dim">（出力なし）</span>';
+  return output.map(it => {
+    if (it && typeof it === 'object' && '_count' in it) return 'Count : ' + it._count;
+    if (it && typeof it === 'object' && 'Name' in it) return `${it.Name}　${it.Length} KB　${it.LastWriteTime}日前`;
+    return String(it);
+  }).join('\n');
+}
+function feedback(html, ok){
+  const p = $('feedback-panel'); p.classList.remove('hidden');
+  const t = $('feedback-text'); t.innerHTML = html; t.className = 'feedback ' + (ok ? 'ok' : 'ng');
+}
+function markCleared(q){
+  const arr = clearedStages(q.theme);
+  if (!arr.includes(q.stage)){ arr.push(q.stage); save.cleared[q.theme] = arr; }
+  if (q.stage === 4) save.scripts[q.theme] = $('cmd-input').value;
+  if (q.stage === 5) save.auto[q.theme] = true;
+  persist();
+}
+$('btn-run').addEventListener('click', () => {
+  const q = currentQuest; const src = $('cmd-input').value.trim();
+  $('btn-next').classList.add('hidden');
+  if (!src){ feedback('コマンドが入力されていません。', false); return; }
+  // display run
+  const dispEnv = makeEnv(); const dispCtx = newCtx();
+  try {
+    if (q.stage === 5 && save.scripts[q.theme]) loadDefs(save.scripts[q.theme], dispEnv, dispCtx);
+    runProgram(src, dispEnv, dispCtx);
+  } catch (e) {
+    $('out-panel').classList.add('hidden');
+    feedback('実行エラー： ' + e.message, false);
+    return;
+  }
+  $('out-panel').classList.remove('hidden');
+  $('out-text').innerHTML = formatOutput(dispCtx.output);
+  $('quest-env').innerHTML = envHtml(dispEnv);
+  if (q.stage === 5){
+    if (dispCtx.autoRun){
+      feedback('自動実行を登録しました。『1か月進める』で翌月の様子を見てみましょう。', true);
+      $('btn-advance').classList.remove('hidden');
+    } else {
+      feedback('まだ自動実行が登録されていません。Register-AutoRun で登録してください。', false);
+    }
+    return;
+  }
+  const preload = q.stage === 5 ? (save.scripts[q.theme] || '') : undefined;
+  const r = judge(q, src, preload);
+  if (r.pass){
+    markCleared(q);
+    feedback('✔ クリア！ 依頼どおりの結果になりました。', true);
+    const next = QUESTS.find(x => x.theme === q.theme && x.stage === q.stage + 1);
+    if (next){ const b = $('btn-next'); b.classList.remove('hidden'); b.onclick = () => openQuest(next); }
+  } else if (!r.funcOk){
+    feedback('関数の形になっていません。function で OldFileCleanup を定義し、呼び出すところまで書いてください。', false);
+  } else if (!r.outputOk){
+    feedback('出力が依頼と違います。対象のファイルと並び順を確認してください。', false);
+  } else {
+    feedback('結果の状態が依頼と違います。どのファイルがどこへ行くべきか、環境と見比べてください。', false);
+  }
+});
+$('btn-advance').addEventListener('click', () => {
+  const q = currentQuest; const src = $('cmd-input').value.trim();
+  const preload = save.scripts[q.theme] || '';
+  const r = judge(q, src, preload);
+  // show the simulated month on a display env
+  const env = makeEnv(); const ctx = newCtx();
+  try {
+    if (preload) loadDefs(preload, env, ctx);
+    runProgram(src, env, ctx);
+    const before = stateSnapshot(env);
+    simulate(q, env, ctx);
+    const after = stateSnapshot(env);
+    const moved = (after.Archive || []).filter(n => !(before.Archive || []).includes(n));
+    $('out-panel').classList.remove('hidden');
+    $('out-text').innerHTML = '— 1か月が経ちました —\n' +
+      (moved.length ? '自動実行で Archive へ移動：\n' + moved.join('\n') : '自動実行で移動したファイルはありません');
+    $('quest-env').innerHTML = envHtml(env);
+  } catch (e) { feedback('実行エラー： ' + e.message, false); return; }
+  if (r.pass){
+    markCleared(q);
+    feedback('✔ クリア！ 登録したスクリプトが自動で片付けてくれました。このテーマは自動化済みです。', true);
+    $('btn-advance').classList.add('hidden');
+  } else {
+    feedback('自動実行後の状態が依頼と違います。登録した日数と、関数の動きを確認してください。', false);
+  }
+});
+setBg('assets/bg-common.jpg');
+</script>
+</body>
+</html>
