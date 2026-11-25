@@ -73,6 +73,10 @@
   .feedback{font-size:14.5px;line-height:1.7}
   .feedback.ok{color:var(--lime);font-weight:700}
   .feedback.ng{color:var(--red)}
+  .autobar{height:12px;background:#0a2e1c;border:1.5px solid var(--line);border-radius:999px;overflow:hidden;margin:8px 0 4px}
+  .autobar i{display:block;height:100%;background:linear-gradient(90deg,var(--green),var(--lime))}
+  .autotext{font-size:13px;color:var(--sub)}
+  .autotext b{color:var(--yellow);font-size:15px}
   .hidden{display:none}
   footer{margin-top:22px;text-align:center;color:var(--sub);font-size:11px;line-height:1.8}
 </style>
@@ -86,12 +90,14 @@
     <img class="logo" src="assets/logo.jpg" alt="PIPE IT! — Script More, Work Less">
     <button class="bigbtn" id="btn-start">▶ はじめる</button>
     <button class="ghostbtn" id="btn-sound">🔊 音：オン</button>
+    <div class="panel" style="text-align:left"><h3>自動化の進み具合</h3><div class="autobar"><i id="auto-fill" style="width:0%"></i></div><div class="autotext" id="auto-text"></div></div>
     <p class="note">PowerShell のコマンドで日々の運用作業をこなすゲームです。最初は手打ち、覚えたらスクリプト化、そして自動化へ。<br>Microsoft、Windows、PowerShell は Microsoft グループの商標です。本アプリは非公式の学習ゲームで、Microsoft とは関係ありません。</p>
   </section>
 
   <!-- themes -->
   <section id="screen-themes" class="hidden">
     <div class="bar"><h2>業務テーマを選ぶ</h2></div>
+    <div class="autotext" id="theme-auto" style="margin:-4px 0 6px"></div>
     <div id="theme-list"></div>
     <footer>クリアした段階は端末に保存されます</footer>
   </section>
@@ -548,7 +554,15 @@ function setBg(img){ wrap.style.backgroundImage = img ? `linear-gradient(rgba(3,
 
 $('btn-start').addEventListener('click', () => { seTap(); renderThemes(); show('screen-themes'); });
 
+function autoStats(){ const total = THEMES.length; const done = THEMES.filter(t => save.auto[t.id]).length; return { done, total, pct: Math.round(done / total * 100) }; }
+function renderAuto(){
+  const s = autoStats();
+  const fill = $('auto-fill'); if (fill) fill.style.width = s.pct + '%';
+  const txt = $('auto-text'); if (txt) txt.innerHTML = `自動化率 <b>${s.pct}%</b>（${s.done} / ${s.total} テーマ自動化済み）`;
+  const th = $('theme-auto'); if (th) th.innerHTML = `自動化率 <b>${s.pct}%</b>（${s.done} / ${s.total} テーマ自動化済み）`;
+}
 function renderThemes(){
+  renderAuto();
   setBg('assets/bg-common.jpg');
   const list = $('theme-list'); list.innerHTML = '';
   for (const th of THEMES){
@@ -726,6 +740,7 @@ $('btn-advance').addEventListener('click', () => {
   }
 });
 renderSound();
+renderAuto();
 setBg('assets/bg-common.jpg');
 </script>
 </body>
