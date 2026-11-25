@@ -127,6 +127,7 @@
     <div class="panel hidden" id="out-panel"><h3>出力</h3><div class="out" id="out-text"></div></div>
     <div class="panel hidden" id="feedback-panel"><div class="feedback" id="feedback-text"></div>
       <button class="bigbtn hidden" id="btn-next">▶ 次の段階へ</button>
+      <button class="ghostbtn hidden" id="btn-fix4">段階4の関数を直す</button>
     </div>
   </section>
 
@@ -135,6 +136,10 @@
 'use strict';
 /* ================= data ================= */
 const FOLDERS = ['Downloads', 'Archive', 'Trash'];
+/* base data: Length is written in KB here and converted to bytes (as in real
+   PowerShell); LastWriteTime is written as "days ago" and converted to a
+   date value (today = 0, n days ago = -n), so comparisons read like the real
+   thing: $_.LastWriteTime -le (Get-Date).AddDays(-90) */
 function baseFiles(){ return [
   {Name:'見積書_2025.xlsx',   Length:240,  LastWriteTime:12,  Extension:'.xlsx'},
   {Name:'会議メモ.txt',       Length:8,    LastWriteTime:3,   Extension:'.txt'},
@@ -147,13 +152,26 @@ function baseFiles(){ return [
   {Name:'音楽サンプル.mp3',   Length:4100, LastWriteTime:15,  Extension:'.mp3'},
   {Name:'old_notes.txt',      Length:22,   LastWriteTime:190, Extension:'.txt'},
   {Name:'設計図_v2.pdf',      Length:760,  LastWriteTime:95,  Extension:'.pdf'},
-  {Name:'cache2.tmp',         Length:45,   LastWriteTime:95,  Extension:'.tmp'}
+  {Name:'cache2.tmp',         Length:45,   LastWriteTime:95,  Extension:'.tmp'},
+  {Name:'old_cache.tmp',      Length:30,   LastWriteTime:90,  Extension:'.tmp'},
+  {Name:'recent_work.tmp',    Length:28,   LastWriteTime:89,  Extension:'.tmp'},
+  {Name:'集計データ.csv',     Length:100,  LastWriteTime:50,  Extension:'.csv'},
+  {Name:'手順書_改訂.pdf',    Length:150,  LastWriteTime:20,  Extension:'.pdf'}
 ];}
+function toFile(f){
+  return { Name:f.Name, Length: Math.round(f.Length * 1024), LastWriteTime:{ __date:-f.LastWriteTime }, Extension:f.Extension, Folder:'Downloads' };
+}
 function makeEnv(){
   const env = {Downloads:[], Archive:[], Trash:[]};
-  for (const f of baseFiles()) env.Downloads.push(Object.assign({}, f, {Folder:'Downloads'}));
+  for (const f of baseFiles()) env.Downloads.push(toFile(f));
+  env.Downloads.sort((a, b) => a.Name.localeCompare(b.Name, 'ja'));
   return env;
 }
+function fmtDate(dv){
+  const base = new Date(); base.setDate(base.getDate() + dv.__date);
+  return base.getFullYear() + '/' + (base.getMonth() + 1) + '/' + base.getDate();
+}
+function fmtSize(bytes){ const kb = bytes / 1024; return (Math.round(kb * 10) / 10) + ' KB'; }
 const THEMES = [
   {id:'files',   name:'ファイル整理',           icon:'assets/obj-folder.png',  bg:'assets/bg-files.jpg',   ready:true},
   {id:'log',     name:'ログ調査',               icon:'assets/obj-log.png',     bg:'assets/bg-log.jpg',     ready:false},
@@ -174,27 +192,27 @@ const QUESTS = [
     chips:['Get-ChildItem','Downloads','Archive','Trash'] },
   { id:'files-2', theme:'files', stage:2, title:'大きいファイルを大きい順に',
     request:'「容量を食っているのはどれだ。100KB より大きいファイルだけを、大きい順に並べて見せてくれ」',
-    solution:'Get-ChildItem Downloads | Where-Object { $_.Length -gt 100 } | Sort-Object Length -Descending', judge:'output',
-    chips:['Get-ChildItem','Downloads','|','Where-Object','{','}','$_','.Length','-gt','100','Sort-Object','-Descending'] },
-  { id:'files-3', theme:'files', stage:3, title:'古い一時ファイルをゴミ箱へ',
-    request:'「90日以上前の .tmp ファイルはゴミ箱（Trash）へ移動してくれ。最近のものは消さないようにな」',
-    solution:"Get-ChildItem Downloads | Where-Object { $_.Extension -eq '.tmp' -and $_.LastWriteTime -ge 90 } | Move-Item -Destination Trash", judge:'state',
-    chips:['Get-ChildItem','Downloads','|','Where-Object','{','}','$_','.Extension','-eq',"'.tmp'",'-and','.LastWriteTime','-ge','90','Move-Item','-Destination','Trash'] },
+    solution:'Get-ChildItem Downloads | Where-Object { $_.Length -gt 100KB } | Sort-Object Length -Descending', judge:'output',
+    chips:['Get-ChildItem','Downloads','|','Where-Object','{','}','$_','.Length','-gt','100KB','Sort-Object','-Descending'] },
+  { id:'files-3', theme:'files', stage:3, title:'古いファイルを仕分ける',
+    request:'「90日以上前のファイルを片付けてくれ。一時ファイル（.tmp）は Trash へ、それ以外は Archive へ移動だ。最近のものは手つかずで頼む」',
+    solution:"Get-ChildItem Downloads | ForEach-Object { if ($_.LastWriteTime -le (Get-Date).AddDays(-90)) { if ($_.Extension -eq '.tmp') { Move-Item -Destination Trash } else { Move-Item -Destination Archive } } }", judge:'state',
+    chips:['Get-ChildItem','Downloads','|','ForEach-Object','{','}','if ($_.LastWriteTime -le (Get-Date).AddDays(-90))',"if ($_.Extension -eq '.tmp')",'else','Move-Item','-Destination','Trash','Archive'] },
   { id:'files-4', theme:'files', stage:4, title:'片付けを関数にする',
-    request:'「この片付けは毎月あるんだ。使い回せるよう関数にしてくれ。名前は OldFileCleanup、日数は引数 $Days で受け取って、古いファイルを Archive へ移動する動きで。作ったら 180日 で実行してくれ」',
-    solution:'function OldFileCleanup($Days) { Get-ChildItem Downloads | Where-Object { $_.LastWriteTime -ge $Days } | Move-Item -Destination Archive }\nOldFileCleanup 180',
-    judge:'state', requireFunction:'OldFileCleanup',
-    chips:['function','OldFileCleanup','($Days)','{','}','Get-ChildItem','Downloads','|','Where-Object','$_','.LastWriteTime','-ge','$Days','Move-Item','-Destination','Archive','180'] },
+    request:'「毎月の片付けを、使い回せる関数にしてくれ。名前は Move-OldFile、日数は引数 $Days で受け取って、Downloads の中で $Days 日以上前のファイルをすべて Archive へ移動する動きで。作ったら 180日 で実行してくれ」',
+    solution:'function Move-OldFile($Days) { Get-ChildItem Downloads | Where-Object { $_.LastWriteTime -le (Get-Date).AddDays(-$Days) } | Move-Item -Destination Archive }\nMove-OldFile 180',
+    judge:'state', requireFunction:'Move-OldFile', hiddenTest:{ fn:'Move-OldFile', days:100 },
+    chips:['function','Move-OldFile','($Days)','{','}','Get-ChildItem','Downloads','|','Where-Object','$_.LastWriteTime -le (Get-Date).AddDays(-$Days)','Move-Item','-Destination','Archive','180','Move-OldFile -Days 180'] },
   { id:'files-5', theme:'files', stage:5, title:'毎月の自動実行に登録する',
-    request:'「段階4で作った関数 OldFileCleanup を、毎月の自動実行に登録しよう。ゲーム内コマンド Register-AutoRun で、90日を対象に登録してくれ。登録したら『1か月進める』で翌月まで進め、自動で片付くか確かめよう」',
-    solution:'Register-AutoRun OldFileCleanup -Days 90', judge:'state',
-    preload:'function OldFileCleanup($Days) { Get-ChildItem Downloads | Where-Object { $_.LastWriteTime -ge $Days } | Move-Item -Destination Archive }',
+    request:'「段階4で作った関数 Move-OldFile を、毎月の自動実行に登録しよう。ゲーム内コマンド Register-AutoRun に、実行したいコマンドを { } で囲んで渡してくれ。今回は Move-OldFile を 90日 で。登録したら『1か月進める』で翌月まで進め、自動で片付くか確かめよう」',
+    solution:'Register-AutoRun { Move-OldFile -Days 90 }', judge:'state',
+    preload:'function Move-OldFile($Days) { Get-ChildItem Downloads | Where-Object { $_.LastWriteTime -le (Get-Date).AddDays(-$Days) } | Move-Item -Destination Archive }',
     sim:{ days:30, arrivals:[
       {Name:'作業中メモ.txt', Length:6,   LastWriteTime:2,   Extension:'.txt'},
       {Name:'work_tmp.tmp',   Length:300, LastWriteTime:40,  Extension:'.tmp'},
       {Name:'共有資料.pdf',   Length:500, LastWriteTime:120, Extension:'.pdf'}
     ]},
-    chips:['Register-AutoRun','OldFileCleanup','-Days','90'] }
+    chips:['Register-AutoRun','{','Move-OldFile -Days 90','}'] }
 ];
 
 /* ================= interpreter ================= */
@@ -211,11 +229,22 @@ function tokenize(src){
       if (j >= src.length) throw new Error('文字列が閉じていません'); toks.push({t:'str', v:s}); i = j + 1; continue; }
     if (c === '$'){ let j = i + 1, nm = ''; while (j < src.length && /[A-Za-z0-9_]/.test(src[j])){ nm += src[j]; j++; }
       toks.push({t:'var', v:nm}); i = j; continue; }
+    if (c === '-' && src[i+1] === '$'){ toks.push({t:'neg'}); i++; continue; }
     if (c === '-' && /[A-Za-z]/.test(src[i+1] || '')){ let j = i + 1, nm = '-'; while (j < src.length && /[A-Za-z]/.test(src[j])){ nm += src[j]; j++; }
-      toks.push({t:'param', v:nm}); i = j; continue; }
-    if (/[0-9]/.test(c) || (c === '.' && /[0-9]/.test(src[i+1] || ''))){ let j = i, num = ''; while (j < src.length && /[0-9.]/.test(src[j])){ num += src[j]; j++; }
-      toks.push({t:'num', v:parseFloat(num)}); i = j; continue; }
+      toks.push({t:'param', v:nm.toLowerCase()}); i = j; continue; }
+    if (/[0-9]/.test(c) || (c === '.' && /[0-9]/.test(src[i+1] || '')) || (c === '-' && /[0-9]/.test(src[i+1] || ''))){
+      let j = i, num = ''; if (src[j] === '-'){ num = '-'; j++; }
+      while (j < src.length && /[0-9.]/.test(src[j])){ num += src[j]; j++; }
+      let v = parseFloat(num);
+      const suf = src.slice(j, j + 2);
+      if (/^(KB|MB|GB)$/i.test(suf)){ const m = {KB:1024, MB:1024 * 1024, GB:1024 * 1024 * 1024}[suf.toUpperCase()]; v *= m; j += 2; }
+      toks.push({t:'num', v}); i = j; continue; }
+    if (c === '*'){ let j = i, w = ''; while (j < src.length && /[A-Za-z0-9_.*\\-]/.test(src[j])){ w += src[j]; j++; }
+      toks.push({t:'str', v:w}); i = j; continue; }
+    if (c === '?'){ toks.push({t:'word', v:'?'}); i++; continue; }
+    if (c === '['){ let j = i + 1; while (j < src.length && src[j] !== ']') j++; toks.push({t:'type'}); i = j + 1; continue; }
     if (/[A-Za-z_]/.test(c)){ let j = i, w = ''; while (j < src.length && /[A-Za-z0-9_-]/.test(src[j])){ w += src[j]; j++; }
+      if (src[j] === '\\'){ while (j < src.length && /[A-Za-z0-9_.*\\-]/.test(src[j])){ w += src[j]; j++; } toks.push({t:'str', v:w}); i = j; continue; }
       toks.push({t:'word', v:w}); i = j; continue; }
     throw new Error('読み取れない文字があります: ' + c);
   }
@@ -247,6 +276,17 @@ function runProgram(src, env, ctx){
   runStatements(cur, env, ctx, null);
   return ctx;
 }
+function captureParens(cur){
+  const open = cur.next(); if (!open || open.t !== '(') throw new Error('( が必要です');
+  const out = []; let depth = 1;
+  while (!cur.done()){
+    const tk = cur.next();
+    if (tk.t === '(') depth++;
+    if (tk.t === ')'){ depth--; if (depth === 0) return out; }
+    out.push(tk);
+  }
+  throw new Error('( に対応する ) がありません');
+}
 function runStatements(cur, env, ctx, input){
   let value = input;
   while (!cur.done()){
@@ -254,6 +294,7 @@ function runStatements(cur, env, ctx, input){
     if (tk.t === 'sep'){ cur.next(); continue; }
     if (tk.t === '}') break;
     if (tk.t === 'word' && tk.v.toLowerCase() === 'function'){ parseFunctionDef(cur, ctx); value = []; continue; }
+    if (tk.t === 'word' && tk.v.toLowerCase() === 'if'){ value = parseIf(cur, env, ctx, value); continue; }
     value = parsePipeline(cur, env, ctx, value);
     ctx.output = value;
     const nx = cur.peek();
@@ -261,19 +302,41 @@ function runStatements(cur, env, ctx, input){
   }
   return value;
 }
+function parseIf(cur, env, ctx, input){
+  cur.next(); // 'if'
+  const condToks = captureParens(cur);
+  const cond = evalCond(condToks, ctx.currentItem !== undefined ? ctx.currentItem : (Array.isArray(input) ? input[0] : input), ctx);
+  const thenToks = captureBlock(cur);
+  let elseToks = null;
+  const nx = cur.peek();
+  if (nx && nx.t === 'word' && nx.v.toLowerCase() === 'else'){ cur.next(); elseToks = captureBlock(cur); }
+  if (cond) runStatements(new Cur(thenToks), env, ctx, input);
+  else if (elseToks) runStatements(new Cur(elseToks), env, ctx, input);
+  return input;
+}
 function parseFunctionDef(cur, ctx){
   cur.next(); // 'function'
   const nameTk = cur.next();
   if (!nameTk || nameTk.t !== 'word') throw new Error('関数名が必要です');
-  const open = cur.next(); if (!open || open.t !== '(') throw new Error('関数の引数には ( ) が必要です');
-  const params = [];
-  while (!cur.done() && cur.peek().t !== ')'){
-    const tk = cur.next();
-    if (tk.t === 'var') params.push(tk.v);
-    else if (tk.t !== ',') throw new Error('引数の書き方が分かりません');
+  let params = [];
+  if (cur.peek() && cur.peek().t === '('){
+    cur.next(); // '('
+    while (!cur.done() && cur.peek().t !== ')'){
+      const tk = cur.next();
+      if (tk.t === 'var') params.push(tk.v);
+      else if (tk.t !== ',' && tk.t !== 'type') throw new Error('引数の書き方が分かりません');
+    }
+    cur.next(); // ')'
   }
-  cur.next(); // ')'
-  const body = captureBlock(cur);
+  let body = captureBlock(cur);
+  // param($Days) block at the top of the body is the standard form; adopt it
+  if (body.length >= 2 && body[0].t === 'word' && body[0].v.toLowerCase() === 'param' && body[1].t === '('){
+    const pp = []; let j = 2;
+    while (j < body.length && body[j].t !== ')'){ if (body[j].t === 'var') pp.push(body[j].v); j++; }
+    if (pp.length) params = pp;
+    body = body.slice(j + 1);
+    if (body.length && body[0].t === 'sep') body = body.slice(1);
+  }
   ctx.functions[nameTk.v] = { params, body };
 }
 function parsePipeline(cur, env, ctx, input){
@@ -281,7 +344,8 @@ function parsePipeline(cur, env, ctx, input){
   while (cur.peek() && cur.peek().t === 'pipe'){ cur.next(); value = execStage(cur, env, ctx, value); }
   return value;
 }
-const SWITCH_PARAMS = ['-Descending', '-Recurse'];
+const SWITCH_PARAMS = ['-descending', '-recurse', '-whatif'];
+const COMP_OPS = ['-gt','-ge','-lt','-le','-eq','-ne','-like'];
 function execStage(cur, env, ctx, input){
   const nameTk = cur.next();
   if (!nameTk || nameTk.t !== 'word') throw new Error('コマンド名が必要です');
@@ -290,14 +354,17 @@ function execStage(cur, env, ctx, input){
   while (!cur.done()){
     const tk = cur.peek();
     if (tk.t === 'pipe' || tk.t === 'sep' || tk.t === '}') break;
+    if (tk.t === ','){ cur.next(); continue; }
     if (tk.t === '{'){ block = captureBlock(cur); continue; }
     if (tk.t === 'param'){
       cur.next();
-      if (SWITCH_PARAMS.includes(tk.v)){ params[tk.v] = true; continue; }
+      if (COMP_OPS.includes(tk.v)){ positional.push(tk.v); continue; }
+      const pkey = tk.v === '-desc' ? '-descending' : tk.v;
+      if (SWITCH_PARAMS.includes(pkey)){ params[pkey] = true; continue; }
       const nx = cur.peek();
-      if (nx && (nx.t === 'word' || nx.t === 'str' || nx.t === 'num')){ cur.next(); params[tk.v] = nx.v; continue; }
-      if (nx && nx.t === 'var'){ cur.next(); params[tk.v] = resolveVar(nx, null, ctx, cur); continue; }
-      params[tk.v] = true; continue;
+      if (nx && (nx.t === 'word' || nx.t === 'str' || nx.t === 'num')){ cur.next(); params[pkey] = nx.v; continue; }
+      if (nx && nx.t === 'var'){ cur.next(); params[pkey] = resolveVar(nx, null, ctx, cur); continue; }
+      params[pkey] = true; continue;
     }
     if (tk.t === 'word' || tk.t === 'str' || tk.t === 'num'){ cur.next(); positional.push(tk.v); continue; }
     if (tk.t === 'var'){ cur.next(); positional.push(resolveVar(tk, null, ctx, cur)); continue; }
@@ -306,29 +373,59 @@ function execStage(cur, env, ctx, input){
   }
   return dispatch(name, positional, params, block, input, env, ctx);
 }
+function propOf(obj, name){
+  if (obj == null || typeof obj !== 'object') return undefined;
+  const key = Object.keys(obj).find(k => k.toLowerCase() === String(name).toLowerCase());
+  return key !== undefined ? obj[key] : undefined;
+}
+function canonFolder(name){
+  return FOLDERS.find(f => f.toLowerCase() === String(name).toLowerCase());
+}
 function resolveVar(tk, item, ctx, cur){
   let base;
   if (tk.v === '_') base = (ctx.currentItem !== undefined ? ctx.currentItem : item);
   else base = ctx.vars[tk.v];
   while (cur && cur.peek() && cur.peek().t === '.'){
     cur.next(); const w = cur.next();
-    if (w && w.t === 'word') base = (base == null ? undefined : base[w.v]);
+    if (w && w.t === 'word') base = propOf(base, w.v);
   }
   return base;
+}
+function likeMatch(value, pattern){
+  const re = new RegExp('^' + String(pattern).replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.') + '$', 'i');
+  return re.test(String(value));
 }
 function dispatch(name, positional, params, block, input, env, ctx){
   const lower = name.toLowerCase();
   const items = Array.isArray(input) ? input : (input == null ? [] : [input]);
   if (lower === 'get-childitem' || lower === 'gci' || lower === 'dir' || lower === 'ls'){
-    const folder = (positional[0] !== undefined ? positional[0] : (params['-Path'] !== undefined ? params['-Path'] : 'Downloads'));
-    if (!FOLDERS.includes(folder)) throw new Error('フォルダ "' + folder + '" はありません（Downloads / Archive / Trash）');
-    return env[folder].slice();
+    let path = (positional[0] !== undefined ? positional[0] : (params['-path'] !== undefined ? params['-path'] : 'Downloads'));
+    let pattern = null;
+    if (typeof path === 'string' && path.includes('*')){
+      const cut = Math.max(path.lastIndexOf('\\'), path.lastIndexOf('/'));
+      if (cut >= 0){ pattern = path.slice(cut + 1); path = path.slice(0, cut); }
+      else { pattern = path; path = 'Downloads'; }
+    }
+    const folder = canonFolder(path);
+    if (!folder) throw new Error('フォルダ "' + path + '" はありません（Downloads / Archive / Trash）');
+    let out = env[folder].slice();
+    if (pattern) out = out.filter(f => likeMatch(f.Name, pattern));
+    if (params['-filter'] !== undefined) out = out.filter(f => likeMatch(f.Name, params['-filter']));
+    return out;
   }
-  if (lower === 'where-object'){
-    if (!block) throw new Error('Where-Object には { 条件 } が必要です');
+  if (lower === 'where-object' || lower === 'where' || name === '?'){
+    if (!block){
+      if (positional.length >= 3 && COMP_OPS.includes(positional[1])){
+        const val = positional[2];
+        const valTok = typeof val === 'number' ? {t:'num', v:val} : {t:'str', v:String(val)};
+        block = [{t:'var', v:'_'}, {t:'.'}, {t:'word', v:String(positional[0])}, {t:'param', v:positional[1]}, valTok];
+      } else {
+        throw new Error('Where-Object の条件は { $_.Length -gt 100KB } の形で書いてください');
+      }
+    }
     return items.filter(it => evalCond(block, it, ctx));
   }
-  if (lower === 'foreach-object'){
+  if (lower === 'foreach-object' || lower === 'foreach'){
     if (!block) throw new Error('ForEach-Object には { 処理 } が必要です');
     const out = [];
     for (const it of items){
@@ -339,28 +436,44 @@ function dispatch(name, positional, params, block, input, env, ctx){
     }
     return out;
   }
-  if (lower === 'sort-object'){
-    const prop = (positional[0] !== undefined ? positional[0] : (params['-Property'] !== undefined ? params['-Property'] : 'Name'));
-    const desc = params['-Descending'] === true;
+  if (lower === 'sort-object' || lower === 'sort'){
+    const prop = (positional[0] !== undefined ? positional[0] : (params['-property'] !== undefined ? params['-property'] : 'Name'));
+    const desc = params['-descending'] === true;
     return items.slice().sort((a, b) => {
-      const x = a[prop], y = b[prop];
+      let x = propOf(a, prop), y = propOf(b, prop);
+      if (x && typeof x === 'object' && '__date' in x) x = x.__date;
+      if (y && typeof y === 'object' && '__date' in y) y = y.__date;
       let r;
       if (typeof x === 'number' && typeof y === 'number') r = x - y;
       else r = String(x).localeCompare(String(y), 'ja');
       return desc ? -r : r;
     });
   }
-  if (lower === 'select-object'){
-    if (params['-First'] !== undefined) return items.slice(0, Number(params['-First']));
-    return items.slice();
+  if (lower === 'select-object' || lower === 'select'){
+    let out = items.slice();
+    const props = positional.filter(p => typeof p === 'string');
+    if (params['-property'] !== undefined) props.unshift(params['-property']);
+    if (props.length){
+      out = out.map(it => {
+        if (!it || typeof it !== 'object') return it;
+        const o = {};
+        for (const p of props){ const key = Object.keys(it).find(k => k.toLowerCase() === String(p).toLowerCase()); if (key !== undefined) o[key] = it[key]; }
+        return o;
+      });
+    }
+    if (params['-first'] !== undefined) return out.slice(0, Number(params['-first']));
+    return out;
   }
-  if (lower === 'measure-object'){
+  if (lower === 'measure-object' || lower === 'measure'){
     return [{ _count: items.length }];
   }
-  if (lower === 'move-item'){
-    const dest = params['-Destination'];
-    if (!FOLDERS.includes(dest)) throw new Error('移動先は -Destination でフォルダを指定してください（Downloads / Archive / Trash）');
-    for (const it of items){
+  if (lower === 'move-item' || lower === 'mv' || lower === 'move'){
+    const dest = canonFolder(params['-destination']);
+    if (!dest) throw new Error('移動先は -Destination でフォルダを指定してください（Downloads / Archive / Trash）');
+    if (params['-whatif'] === true) return [];
+    let mvItems = items;
+    if (!mvItems.length && positional[0] && typeof positional[0] === 'object' && 'Folder' in positional[0]) mvItems = [positional[0]];
+    for (const it of mvItems){
       if (!it || typeof it !== 'object' || !('Folder' in it)) continue;
       const srcArr = env[it.Folder]; const idx = srcArr.indexOf(it);
       if (idx >= 0) srcArr.splice(idx, 1);
@@ -368,7 +481,8 @@ function dispatch(name, positional, params, block, input, env, ctx){
     }
     return [];
   }
-  if (lower === 'remove-item'){
+  if (lower === 'remove-item' || lower === 'del' || lower === 'rm' || lower === 'ri'){
+    if (params['-whatif'] === true) return [];
     for (const it of items){
       if (!it || typeof it !== 'object' || !('Folder' in it)) continue;
       const arr = env[it.Folder]; const idx = arr.indexOf(it);
@@ -377,22 +491,29 @@ function dispatch(name, positional, params, block, input, env, ctx){
     return [];
   }
   if (lower === 'register-autorun'){
+    if (block){ ctx.autoRun = { block }; return []; }
     const func = positional[0];
-    if (!func) throw new Error('Register-AutoRun には関数名が必要です');
-    ctx.autoRun = { func, days: Number(params['-Days'] || 0) };
+    if (!func) throw new Error('Register-AutoRun には { 実行するコマンド } が必要です');
+    ctx.autoRun = { func, days: Number(params['-days'] || 0) };
     return [];
   }
-  if (ctx.functions[name]){
-    return invokeFunction(ctx, env, name, positional);
+  const fnKey = Object.keys(ctx.functions).find(k => k.toLowerCase() === lower);
+  if (fnKey){
+    return invokeFunction(ctx, env, fnKey, positional, params);
   }
   throw new Error('コマンド "' + name + '" はこのゲームでは使えません');
 }
-function invokeFunction(ctx, env, name, args){
+function invokeFunction(ctx, env, name, args, namedParams){
   const fn = ctx.functions[name];
   if (!fn) throw new Error('関数 "' + name + '" が見つかりません');
   const savedVars = ctx.vars;
   ctx.vars = Object.assign({}, savedVars);
-  fn.params.forEach((p, i) => { ctx.vars[p] = args[i]; });
+  const positional = (args || []).slice();
+  fn.params.forEach((p) => {
+    const key = '-' + p.toLowerCase();
+    if (namedParams && namedParams[key] !== undefined) ctx.vars[p] = namedParams[key];
+    else if (positional.length) ctx.vars[p] = positional.shift();
+  });
   const v = runStatements(new Cur(fn.body), env, ctx, null);
   ctx.vars = savedVars;
   return v;
@@ -415,7 +536,6 @@ function parseAnd(cur, ctx){
   while (cur.peek() && cur.peek().t === 'param' && cur.peek().v === '-and'){ cur.next(); const r = parseCmp(cur, ctx); l = !!l && !!r; }
   return l;
 }
-const COMP_OPS = ['-gt','-ge','-lt','-le','-eq','-ne'];
 function parseCmp(cur, ctx){
   const l = parseOperand(cur, ctx);
   const tk = cur.peek();
@@ -428,21 +548,41 @@ function parseCmp(cur, ctx){
 function parseOperand(cur, ctx){
   const tk = cur.next();
   if (!tk) throw new Error('条件の右側がありません');
-  if (tk.t === '('){ const v = parseOr(cur, ctx); const close = cur.next(); if (!close || close.t !== ')') throw new Error(') が必要です'); return v; }
+  if (tk.t === 'neg'){ const v = parseOperand(cur, ctx); return (typeof v === 'number') ? -v : NaN; }
+  if (tk.t === '('){
+    let v = parseOr(cur, ctx);
+    const close = cur.next(); if (!close || close.t !== ')') throw new Error(') が必要です');
+    while (cur.peek() && cur.peek().t === '.'){
+      cur.next(); const w = cur.next();
+      if (!w || w.t !== 'word') throw new Error('メソッド名が必要です');
+      if (w.v.toLowerCase() !== 'adddays') throw new Error('このゲームで使えるメソッドは .AddDays() だけです');
+      const argToks = captureParens(cur);
+      const arg = parseOr(new Cur(argToks), ctx);
+      if (!v || typeof v !== 'object' || !('__date' in v)) throw new Error('.AddDays() は日付にだけ使えます');
+      v = { __date: v.__date + arg };
+    }
+    return v;
+  }
   if (tk.t === 'num' || tk.t === 'str') return tk.v;
-  if (tk.t === 'word') return tk.v;
+  if (tk.t === 'word'){
+    if (tk.v.toLowerCase() === 'get-date') return { __date: 0 };
+    return tk.v;
+  }
   if (tk.t === '.'){ const w = cur.next(); return '.' + (w ? w.v : ''); }
   if (tk.t === 'var'){
     let base = (tk.v === '_') ? ctx.currentItem : ctx.vars[tk.v];
     while (cur.peek() && cur.peek().t === '.'){
       cur.next(); const w = cur.next();
-      if (w && w.t === 'word') base = (base == null ? undefined : base[w.v]);
+      if (w && w.t === 'word') base = propOf(base, w.v);
     }
     return base;
   }
   throw new Error('条件の読み取りで止まりました');
 }
+function unwrapVal(v){ return (v && typeof v === 'object' && '__date' in v) ? v.__date : v; }
 function compareVals(l, op, r){
+  if (op === '-like') return likeMatch(l, r);
+  l = unwrapVal(l); r = unwrapVal(r);
   if (typeof l === 'number' && typeof r === 'number'){
     switch (op){ case '-gt': return l > r; case '-ge': return l >= r; case '-lt': return l < r; case '-le': return l <= r; case '-eq': return l === r; case '-ne': return l !== r; }
   }
@@ -452,12 +592,13 @@ function compareVals(l, op, r){
 }
 /* simulation & judging */
 function advanceTime(env, days, arrivals){
-  for (const f of FOLDERS) for (const file of env[f]) file.LastWriteTime += days;
-  for (const a of arrivals || []) env.Downloads.push(Object.assign({}, a, {Folder:'Downloads'}));
+  for (const f of FOLDERS) for (const file of env[f]) file.LastWriteTime.__date -= days;
+  for (const a of arrivals || []) env.Downloads.push(toFile(a));
 }
 function simulate(quest, env, ctx){
   advanceTime(env, quest.sim.days, quest.sim.arrivals);
-  if (ctx.autoRun) invokeFunction(ctx, env, ctx.autoRun.func, [ctx.autoRun.days]);
+  if (ctx.autoRun && ctx.autoRun.block) runStatements(new Cur(ctx.autoRun.block), env, ctx, null);
+  else if (ctx.autoRun) invokeFunction(ctx, env, ctx.autoRun.func, [ctx.autoRun.days]);
 }
 function stateSnapshot(env){
   const o = {};
@@ -500,17 +641,53 @@ function attempt(quest, src, preloadSrc){
 function judge(quest, playerSrc, playerPreloadSrc){
   const exp = attempt(quest, quest.solution, quest.preload || null);
   const got = attempt(quest, playerSrc, playerPreloadSrc !== undefined ? playerPreloadSrc : (quest.preload || null));
-  const result = { pass:false, err:got.err, funcOk:true, outputOk:true, stateOk:true };
-  if (got.err) return result;
+  const result = { pass:false, err:got.err, funcOk:true, outputOk:true, stateOk:true, code:null, diff:null, removed:[] };
+  if (got.err){ result.code = 'error'; return result; }
   if (quest.requireFunction && !got.ctx.functions[quest.requireFunction]) result.funcOk = false;
   if (quest.judge === 'output'){
     result.outputOk = JSON.stringify(outputSignature(exp.ctx.output)) === JSON.stringify(outputSignature(got.ctx.output));
   }
   if (quest.judge === 'state'){
     result.stateOk = JSON.stringify(stateSnapshot(exp.env)) === JSON.stringify(stateSnapshot(got.env));
+    const es = stateSnapshot(exp.env), gs = stateSnapshot(got.env);
+    const remaining = [], extra = [];
+    for (const f of ['Archive', 'Trash']){
+      for (const n of es[f]) if (!gs[f].includes(n) && gs.Downloads.includes(n)) remaining.push(n);
+      for (const n of gs[f]) if (!es[f].includes(n)) extra.push(n);
+    }
+    result.diff = { remaining, extra };
+    const allGot = FOLDERS.flatMap(f => gs[f]);
+    const allExp = FOLDERS.flatMap(f => es[f]);
+    result.removed = allExp.filter(n => !allGot.includes(n));
   }
   result.pass = result.funcOk && result.outputOk && result.stateOk;
+  if (result.pass && quest.hiddenTest){
+    const h = runHiddenTest(quest, playerSrc);
+    if (!h.pass){ result.pass = false; result.code = h.code; }
+  }
+  if (!result.pass && !result.code){
+    if (!result.funcOk) result.code = 'func';
+    else if (result.removed && result.removed.length) result.code = 'removed';
+    else if (!result.outputOk) result.code = 'output';
+    else result.code = 'state';
+  }
+  if (result.pass) result.code = 'ok';
   return result;
+}
+/* Re-run the player's function with a different -Days on a fresh env.
+   Catches functions that ignore $Days or cannot be called with -Days,
+   which would otherwise only fail one stage later. */
+function runHiddenTest(quest, playerSrc){
+  const fn = quest.hiddenTest.fn, days = quest.hiddenTest.days;
+  const call = fn + ' -Days ' + days;
+  const expEnv = makeEnv(); const expCtx = newCtx();
+  try { loadDefs(quest.solution, expEnv, expCtx); runProgram(call, expEnv, expCtx); }
+  catch (e) { return { pass:true }; }
+  const gotEnv = makeEnv(); const gotCtx = newCtx();
+  try { loadDefs(playerSrc, gotEnv, gotCtx); runProgram(call, gotEnv, gotCtx); }
+  catch (e) { return { pass:false, code:'hidden-named' }; }
+  const ok = JSON.stringify(stateSnapshot(expEnv)) === JSON.stringify(stateSnapshot(gotEnv));
+  return ok ? { pass:true } : { pass:false, code:'hidden-fixed' };
 }
 </script>
 <script>
@@ -519,8 +696,8 @@ function judge(quest, playerSrc, playerPreloadSrc){
 const $ = id => document.getElementById(id);
 const wrap = $('wrap');
 let save = { cleared:{}, scripts:{}, auto:{} };
-try { const s = localStorage.getItem('pipeit-save-v1'); if (s) save = Object.assign(save, JSON.parse(s)); } catch (e) {}
-function persist(){ try { localStorage.setItem('pipeit-save-v1', JSON.stringify(save)); } catch (e) {} }
+try { const s = localStorage.getItem('pipeit-save-v2'); if (s) save = Object.assign(save, JSON.parse(s)); } catch (e) {}
+function persist(){ try { localStorage.setItem('pipeit-save-v2', JSON.stringify(save)); } catch (e) {} }
 /* sound: thick SE only, no BGM (user decision 2026-11-26) */
 let audioCtx = null;
 function ac(){ if (!audioCtx) { try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return null; } } if (audioCtx.state === 'suspended') audioCtx.resume(); return audioCtx; }
@@ -606,7 +783,7 @@ function envHtml(env){
     if (!env[f].length) h += '<div class="empty">（空です）</div>';
     else {
       h += '<table>' + env[f].map(x =>
-        `<tr><td style="width:26px"><img src="assets/obj-file.png" alt=""></td><td class="n">${x.Name}</td><td class="r">${x.Length} KB</td><td class="r">${x.LastWriteTime}日前</td></tr>`).join('') + '</table>';
+        `<tr><td style="width:26px"><img src="assets/obj-file.png" alt=""></td><td class="n">${x.Name}</td><td class="r">${fmtSize(x.Length)}</td><td class="r">${fmtDate(x.LastWriteTime)}</td></tr>`).join('') + '</table>';
     }
   }
   return h;
@@ -617,7 +794,7 @@ function openQuest(q){
   $('game-title').textContent = `段階${q.stage}： ${q.title}`;
   $('game-sub').textContent = `${currentTheme.name} ／ ${STAGE_NAMES[q.stage - 1]}`;
   let req = q.request;
-  if (q.stage === 5 && save.scripts.files) req += '<br><span style="color:var(--sub);font-size:12.5px">保存済みスクリプト： 段階4で作った OldFileCleanup が読み込まれています。</span>';
+  if (q.stage === 5 && save.scripts.files) req += '<br><span style="color:var(--sub);font-size:12.5px">保存済みスクリプト： 段階4で作った Move-OldFile が読み込まれています。</span>';
   $('quest-request').innerHTML = req;
   $('quest-env').innerHTML = envHtml(makeEnv());
   const input = $('cmd-input'); input.value = (q.stage === 4 && save.scripts.files) ? save.scripts.files : '';
@@ -630,6 +807,7 @@ function openQuest(q){
   $('out-panel').classList.add('hidden');
   $('feedback-panel').classList.add('hidden');
   $('btn-next').classList.add('hidden');
+  $('btn-fix4').classList.add('hidden');
   $('btn-advance').classList.add('hidden');
   show('screen-game');
 }
@@ -647,7 +825,7 @@ function formatOutput(output){
   if (!output || !output.length) return '<span class="dim">（出力なし）</span>';
   return output.map(it => {
     if (it && typeof it === 'object' && '_count' in it) return 'Count : ' + it._count;
-    if (it && typeof it === 'object' && 'Name' in it) return `${it.Name}　${it.Length} KB　${it.LastWriteTime}日前`;
+    if (it && typeof it === 'object' && 'Name' in it) return `${it.Name}　${fmtSize(it.Length)}　${fmtDate(it.LastWriteTime)}`;
     return String(it);
   }).join('\n');
 }
@@ -662,6 +840,14 @@ function markCleared(q){
   if (q.stage === 5) save.auto[q.theme] = true;
   persist();
 }
+function diffText(r){
+  if (!r.diff) return '';
+  let s = '';
+  if (r.diff.remaining.length) s += '<br>まだ Downloads に残っている： ' + r.diff.remaining.join('、');
+  if (r.diff.extra.length) s += '<br>動かなくてよいものが動いている： ' + r.diff.extra.join('、');
+  return s;
+}
+$('btn-fix4').addEventListener('click', () => { seTap(); const q4 = QUESTS.find(x => x.theme === currentQuest.theme && x.stage === 4); if (q4) openQuest(q4); });
 $('btn-reset').addEventListener('click', () => { seTap(); openQuest(currentQuest); });
 $('btn-run').addEventListener('click', () => {
   const q = currentQuest; const src = $('cmd-input').value.trim();
@@ -699,15 +885,24 @@ $('btn-run').addEventListener('click', () => {
     feedback('✔ クリア！ 依頼どおりの結果になりました。', true);
     const next = QUESTS.find(x => x.theme === q.theme && x.stage === q.stage + 1);
     if (next){ const b = $('btn-next'); b.classList.remove('hidden'); b.onclick = () => openQuest(next); }
+  } else if (r.code === 'hidden-named'){
+    seNg();
+    feedback('関数を -Days で呼び出す形になっていません。引数名を $Days にしてください（param($Days) の形でも構いません）。段階5では -Days で呼ばれるので、今のうちに直しておきましょう。', false);
+  } else if (r.code === 'hidden-fixed'){
+    seNg();
+    feedback('日数を変えて試しても、結果が変わりませんでした。関数の中で $Days を使って絞り込んでいますか？（日数を直接書き込むと、段階5で別の日数で呼ばれたときに動きません）', false);
   } else if (!r.funcOk){
     seNg();
-    feedback('関数の形になっていません。function で OldFileCleanup を定義し、呼び出すところまで書いてください。', false);
+    feedback('関数の形になっていません。function で Move-OldFile を定義し、呼び出すところまで書いてください。', false);
+  } else if (r.code === 'removed'){
+    seNg();
+    feedback('ファイルが完全に消えています。Remove-Item はごみ箱に入らず完全に消えてしまうので、移動には Move-Item を使います。消えたファイル： ' + r.removed.join('、'), false);
   } else if (!r.outputOk){
     seNg();
     feedback('出力が依頼と違います。対象のファイルと並び順を確認してください。', false);
   } else {
     seNg();
-    feedback('結果の状態が依頼と違います。どのファイルがどこへ行くべきか、環境と見比べてください。', false);
+    feedback('結果の状態が依頼と違います。' + diffText(r), false);
   }
 });
 $('btn-advance').addEventListener('click', () => {
@@ -731,11 +926,14 @@ $('btn-advance').addEventListener('click', () => {
   if (r.pass){
     markCleared(q);
     seOk();
-    feedback('✔ クリア！ 登録したスクリプトが自動で片付けてくれました。このテーマは自動化済みです。', true);
+    feedback('✔ クリア！ 登録したスクリプトが自動で片付けてくれました。このテーマは自動化済みです。<br><span style="font-size:12.5px;color:var(--sub)">実務メモ： Register-AutoRun はゲーム内専用コマンドです。実務ではタスクスケジューラに Register-ScheduledTask で登録します。なお、New-ScheduledTaskTrigger には毎月の指定がないため、毎月実行はタスクスケジューラの画面や schtasks /sc monthly で設定します。あと、共有資料.pdf のように「届いたばかりでも最終更新日が古い」ファイルは、更新日で判定すると片付け対象になります。</span>', true);
     $('btn-advance').classList.add('hidden');
   } else {
     seNg();
-    feedback('自動実行後の状態が依頼と違います。登録した日数と、関数の動きを確認してください。', false);
+    let msg = '自動実行後の状態が依頼と違います。' + diffText(r);
+    if (preload) msg += '<br><span style="font-size:12.5px;color:var(--sub)">読み込まれている段階4の関数：<br>' + preload.replace(/</g, '&lt;').replace(/\n/g, '<br>') + '</span>';
+    feedback(msg, false);
+    $('btn-fix4').classList.remove('hidden');
   }
 });
 renderAuto();
