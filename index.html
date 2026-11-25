@@ -65,6 +65,7 @@
   .env td.r{text-align:right;white-space:nowrap;color:var(--sub)}
   .env img{width:22px;height:22px;object-fit:contain;vertical-align:middle}
   .env .empty{color:var(--sub);padding:2px 4px}
+  .env .loglines{white-space:pre-wrap;font-family:ui-monospace,Menlo,monospace;font-size:11.5px;line-height:1.75;padding:2px 4px;word-break:break-all}
   textarea{width:100%;min-height:76px;background:#03130b;color:#eaffea;border:2px solid var(--line);
     border-radius:10px;padding:10px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:14.5px;line-height:1.6;resize:vertical}
   .chips{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 0}
@@ -171,33 +172,36 @@ function fmtDate(dv){
   const base = new Date(); base.setDate(base.getDate() + dv.__date);
   return base.getFullYear() + '/' + (base.getMonth() + 1) + '/' + base.getDate();
 }
-/* ---- theme: log ---- */
+/* ---- theme: log ----
+   Log lines are plain TEXT lines (like real Get-Content output):
+   "HH:MM LEVEL SOURCE message". Searching is done with -like patterns. */
 function baseLines(){ return [
-  {Time:'08:58', Hour:8,  Level:'INFO',  Source:'Web',   Message:'サーバー起動'},
-  {Time:'09:01', Hour:9,  Level:'INFO',  Source:'決済',  Message:'決済サービス接続OK'},
-  {Time:'09:03', Hour:9,  Level:'WARN',  Source:'DB',    Message:'接続プール使用率80%'},
-  {Time:'09:05', Hour:9,  Level:'ERROR', Source:'アプリ', Message:'timeout: 注文API応答なし'},
-  {Time:'09:12', Hour:9,  Level:'ERROR', Source:'決済',  Message:'timeout: 決済ゲートウェイ応答なし'},
-  {Time:'09:18', Hour:9,  Level:'WARN',  Source:'アプリ', Message:'メモリ使用率85%'},
-  {Time:'09:21', Hour:9,  Level:'ERROR', Source:'アプリ', Message:'timeout: 在庫API応答なし'},
-  {Time:'09:30', Hour:9,  Level:'ERROR', Source:'DB',    Message:'接続エラー: 接続が拒否されました'},
-  {Time:'09:40', Hour:9,  Level:'ERROR', Source:'決済',  Message:'カード検証エラー'},
-  {Time:'09:52', Hour:9,  Level:'INFO',  Source:'DB',    Message:'バックアップ完了'},
-  {Time:'10:02', Hour:10, Level:'INFO',  Source:'Web',   Message:'定期ヘルスチェックOK'},
-  {Time:'10:06', Hour:10, Level:'ERROR', Source:'決済',  Message:'timeout: 決済ゲートウェイ応答なし'},
-  {Time:'10:11', Hour:10, Level:'WARN',  Source:'決済',  Message:'決済キューの滞留'},
-  {Time:'10:15', Hour:10, Level:'ERROR', Source:'決済',  Message:'二重請求の検知'},
-  {Time:'10:23', Hour:10, Level:'ERROR', Source:'アプリ', Message:'timeout: 配送API応答なし'},
-  {Time:'10:31', Hour:10, Level:'INFO',  Source:'決済',  Message:'決済完了 98件'},
-  {Time:'10:36', Hour:10, Level:'ERROR', Source:'決済',  Message:'残高照会エラー'},
-  {Time:'10:40', Hour:10, Level:'ERROR', Source:'Web',   Message:'502エラー多発'},
-  {Time:'10:47', Hour:10, Level:'WARN',  Source:'DB',    Message:'レプリケーション遅延'}
+  '08:58 INFO Web サーバー起動',
+  '09:01 INFO 決済 決済サービス接続OK',
+  '09:03 WARN DB 接続プール使用率80%',
+  '09:05 ERROR アプリ timeout: 注文API応答なし',
+  '09:12 ERROR 決済 timeout: 決済ゲートウェイ応答なし',
+  '09:18 WARN アプリ メモリ使用率85%',
+  '09:21 ERROR アプリ timeout: 在庫API応答なし',
+  '09:30 ERROR DB 接続エラー: 接続が拒否されました',
+  '09:40 ERROR 決済 カード検証エラー',
+  '09:52 INFO DB バックアップ完了',
+  '10:02 INFO Web 定期ヘルスチェックOK',
+  '10:06 ERROR 決済 timeout: 決済ゲートウェイ応答なし',
+  '10:11 WARN 決済 決済キューの滞留',
+  '10:15 ERROR 決済 二重請求の検知',
+  '10:23 ERROR アプリ timeout: 配送API応答なし',
+  '10:29 ERROR アプリ 決済 API応答なし',
+  '10:31 INFO 決済 決済完了 98件',
+  '10:36 ERROR 決済 残高照会エラー',
+  '10:40 ERROR Web 502エラー多発',
+  '10:47 WARN DB レプリケーション遅延',
+  '11:03 INFO アプリ 定期ジョブ完了',
+  '11:15 ERROR 決済 決済ゲートウェイ接続断',
+  '11:32 WARN Web 応答時間の悪化'
 ];}
-function toLine(l){ return Object.assign({}, l, {Folder:'Log'}); }
 function makeLogEnv(){
-  const env = { Log:[], Alerts:[] };
-  for (const l of baseLines()) env.Log.push(toLine(l));
-  return env;
+  return { Log: baseLines(), Alerts: [] };
 }
 function fmtSize(bytes){ const kb = bytes / 1024; return (Math.round(kb * 10) / 10) + ' KB'; }
 const THEMES = [
@@ -229,7 +233,7 @@ const QUESTS = [
   { id:'files-4', theme:'files', stage:4, title:'片付けを関数にする',
     request:'「毎月の片付けを、使い回せる関数にしてくれ。名前は Move-OldFile、日数は引数 $Days で受け取って、Downloads の中で $Days 日以上前のファイルをすべて Archive へ移動する動きで。作ったら 180日 で実行してくれ」',
     solution:'function Move-OldFile($Days) { Get-ChildItem Downloads | Where-Object { $_.LastWriteTime -le (Get-Date).AddDays(-$Days) } | Move-Item -Destination Archive }\nMove-OldFile 180',
-    judge:'state', requireFunction:'Move-OldFile', hiddenTest:{ call:'Move-OldFile -Days 100' },
+    judge:'state', requireFunction:'Move-OldFile', hiddenTest:{ calls:['Move-OldFile -Days 100'], param:'$Days' },
     chips:['function','Move-OldFile','($Days)','{','}','Get-ChildItem','Downloads','|','Where-Object','$_.LastWriteTime -le (Get-Date).AddDays(-$Days)','Move-Item','-Destination','Archive','180','Move-OldFile -Days 180'] },
   { id:'files-5', theme:'files', stage:5, title:'毎月の自動実行に登録する',
     request:'「段階4で作った関数 Move-OldFile を、毎月の自動実行に登録しよう。ゲーム内コマンド Register-AutoRun に、実行したいコマンドを { } で囲んで渡してくれ。今回は Move-OldFile を 90日 で。登録したら『1か月進める』で翌月まで進め、自動で片付くか確かめよう」',
@@ -241,34 +245,34 @@ const QUESTS = [
       {Name:'共有資料.pdf',   Length:500, LastWriteTime:120, Extension:'.pdf'}
     ]},
     chips:['Register-AutoRun','{','Move-OldFile -Days 90','}'] },
-  { id:'log-1', theme:'log', stage:1, title:'ログを全部見る',
-    request:'「昨夜からサーバーが重いという話だ。まず server.log を全部見せてくれ」',
-    solution:'Get-Content server.log', judge:'output',
-    chips:['Get-Content','server.log'] },
+  { id:'log-1', theme:'log', stage:1, title:'ログの直近を見る',
+    request:'「今朝からサーバーが重いという話だ。まず server.log の直近5行を見せてくれ」',
+    solution:'Get-Content server.log -Tail 5', judge:'output',
+    chips:['Get-Content','server.log','-Tail','5'] },
   { id:'log-2', theme:'log', stage:2, title:'エラーだけ抜き出す',
-    request:'「エラーだけ抜き出してくれ。ERROR レベルの行だけだ」',
-    solution:"Get-Content server.log | Where-Object { $_.Level -eq 'ERROR' }", judge:'output',
-    chips:['Get-Content','server.log','|','Where-Object','{','}',"$_.Level -eq 'ERROR'"] },
+    request:'「エラーだけ抜き出してくれ。ERROR レベルの行だけだ。ログは1行ずつのテキストだから、行全体をパターンで調べる形で頼む」',
+    solution:"Get-Content server.log | Where-Object { $_ -like '* ERROR *' }", judge:'output',
+    chips:['Get-Content','server.log','|','Where-Object','{','}',"$_ -like '* ERROR *'"] },
   { id:'log-3', theme:'log', stage:3, title:'障害の時間帯を絞る',
     request:'「障害の連絡が来た。10時台に起きた、決済サービスのエラーを全部出してくれ」',
-    solution:"Get-Content server.log | Where-Object { $_.Hour -ge 10 -and $_.Source -eq '決済' -and $_.Level -eq 'ERROR' }", judge:'output',
-    chips:['Get-Content','server.log','|','Where-Object','{','}','$_.Hour -ge 10','-and',"$_.Source -eq '決済'","$_.Level -eq 'ERROR'"] },
+    solution:"Get-Content server.log | Where-Object { $_ -like '10:*' -and $_ -like '* ERROR 決済 *' }", judge:'output',
+    chips:['Get-Content','server.log','|','Where-Object','{','}',"$_ -like '10:*'",'-and',"$_ -like '* ERROR 決済 *'"] },
   { id:'log-4', theme:'log', stage:4, title:'エラー振り分けを関数にする',
-    request:'「エラーの振り分けを関数にしてくれ。名前は Watch-ErrorLog、引数 $Source でサービス名を受け取って、そのサービスの ERROR 行を Alerts へ移動する動きで。作ったら アプリ で実行してくれ」',
-    solution:"function Watch-ErrorLog($Source) { Get-Content server.log | Where-Object { $_.Level -eq 'ERROR' -and $_.Source -eq $Source } | Move-Item -Destination Alerts }\nWatch-ErrorLog 'アプリ'",
-    judge:'state', requireFunction:'Watch-ErrorLog', hiddenTest:{ call:"Watch-ErrorLog 'DB'" },
-    chips:['function','Watch-ErrorLog','($Source)','{','}','Get-Content','server.log','|','Where-Object',"$_.Level -eq 'ERROR' -and $_.Source -eq $Source",'Move-Item','-Destination','Alerts',"'アプリ'"] },
+    request:'「エラーの振り分けを関数にしてくれ。名前は Copy-ErrorLog、引数 $Source でサービス名を受け取って、そのサービスの ERROR 行を alerts.log に写す動きで。元のログは証跡だから、消したり動かしたりしないこと。作ったら アプリ で実行してくれ」',
+    solution:'function Copy-ErrorLog($Source) { Get-Content server.log | Where-Object { $_ -like "* ERROR $Source *" } | Add-Content alerts.log }\nCopy-ErrorLog \'アプリ\'',
+    judge:'state', requireFunction:'Copy-ErrorLog', hiddenTest:{ calls:["Copy-ErrorLog -Source 'DB'", "Copy-ErrorLog -Source '決済'"], param:'$Source' },
+    chips:['function','Copy-ErrorLog','($Source)','{','}','Get-Content','server.log','|','Where-Object','$_ -like "* ERROR $Source *"','Add-Content','alerts.log',"'アプリ'"] },
   { id:'log-5', theme:'log', stage:5, title:'エラー監視を自動化する',
-    request:'「段階4で作った関数 Watch-ErrorLog を、毎時の自動実行に登録しよう。ゲーム内コマンド Register-AutoRun に、実行したいコマンドを { } で囲んで渡してくれ。今回は 決済 サービスを対象に。登録したら『1時間進める』で次の1時間へ進め、自動で振り分けられるか確かめよう」',
-    solution:"Register-AutoRun { Watch-ErrorLog -Source '決済' }", judge:'state',
-    preload:"function Watch-ErrorLog($Source) { Get-Content server.log | Where-Object { $_.Level -eq 'ERROR' -and $_.Source -eq $Source } | Move-Item -Destination Alerts }",
-    sim:{ label:'1時間進める（自動実行）', pastText:'1時間が経ちました', destName:'Alerts', home:'Log', arrivals:[
-      {Time:'11:03', Hour:11, Level:'ERROR', Source:'決済', Message:'timeout: 決済ゲートウェイ応答なし'},
-      {Time:'11:07', Hour:11, Level:'INFO',  Source:'Web',  Message:'定期ヘルスチェックOK'},
-      {Time:'11:12', Hour:11, Level:'ERROR', Source:'決済', Message:'決済キュー障害: 処理が停止'},
-      {Time:'11:20', Hour:11, Level:'WARN',  Source:'アプリ', Message:'メモリ使用率88%'}
+    request:'「段階4の関数はログ全部を写す作りだ。このまま毎時実行すると、過去のエラーまで毎回重複して写ってしまう。そこで今回は、新しい1時間分（12時台）の 決済 のエラーだけを alerts.log に写すブロックを、ゲーム内コマンド Register-AutoRun に { } で囲んで登録してくれ。登録したら『1時間進める』で次の1時間へ進め、自動で写されるか確かめよう」',
+    solution:"Register-AutoRun { Get-Content server.log | Where-Object { $_ -like '12:* ERROR 決済 *' } | Add-Content alerts.log }", judge:'state',
+    preload:'function Copy-ErrorLog($Source) { Get-Content server.log | Where-Object { $_ -like "* ERROR $Source *" } | Add-Content alerts.log }',
+    sim:{ label:'1時間進める（自動実行）', pastText:'1時間が経ちました', destName:'Alerts', home:'Log', failHint:'alerts.log の中身が期待と違います。全部を写すと過去の分が重複します（12時台の分だけが対象です）', arrivals:[
+      '12:03 ERROR 決済 timeout: 決済ゲートウェイ応答なし',
+      '12:07 INFO Web 定期ヘルスチェックOK',
+      '12:12 ERROR 決済 決済キュー障害: 処理が停止',
+      '12:20 WARN アプリ メモリ使用率88%'
     ]},
-    chips:['Register-AutoRun','{',"Watch-ErrorLog -Source '決済'",'}'] }
+    chips:['Register-AutoRun','{','Get-Content','server.log','|','Where-Object',"$_ -like '12:* ERROR 決済 *'",'Add-Content','alerts.log','}'] }
 ];
 
 /* ================= interpreter ================= */
@@ -282,7 +286,7 @@ function tokenize(src){
     if (c === '{' || c === '}' || c === '(' || c === ')' || c === ','){ toks.push({t:c}); i++; continue; }
     if (c === '.' && !/[0-9]/.test(src[i+1] || '')){ toks.push({t:'.'}); i++; continue; }
     if (c === "'" || c === '"'){ let j = i + 1, s = ''; while (j < src.length && src[j] !== c){ s += src[j]; j++; }
-      if (j >= src.length) throw new Error('文字列が閉じていません'); toks.push({t:'str', v:s}); i = j + 1; continue; }
+      if (j >= src.length) throw new Error('文字列が閉じていません'); toks.push({t:'str', v:s, dq: c === '"'}); i = j + 1; continue; }
     if (c === '$'){ let j = i + 1, nm = ''; while (j < src.length && /[A-Za-z0-9_]/.test(src[j])){ nm += src[j]; j++; }
       toks.push({t:'var', v:nm}); i = j; continue; }
     if (c === '-' && src[i+1] === '$'){ toks.push({t:'neg'}); i++; continue; }
@@ -299,7 +303,7 @@ function tokenize(src){
       toks.push({t:'str', v:w}); i = j; continue; }
     if (c === '?'){ toks.push({t:'word', v:'?'}); i++; continue; }
     if (c === '['){ let j = i + 1; while (j < src.length && src[j] !== ']') j++; toks.push({t:'type'}); i = j + 1; continue; }
-    if (/[A-Za-z_]/.test(c)){ let j = i, w = ''; while (j < src.length && /[A-Za-z0-9_-]/.test(src[j])){ w += src[j]; j++; }
+    if (/[A-Za-z_]/.test(c) || c.charCodeAt(0) > 127){ let j = i, w = ''; while (j < src.length && (/[A-Za-z0-9_-]/.test(src[j]) || src[j].charCodeAt(0) > 127)){ w += src[j]; j++; }
       if (src[j] === '\\'){ while (j < src.length && /[A-Za-z0-9_.*\\-]/.test(src[j])){ w += src[j]; j++; } toks.push({t:'str', v:w}); i = j; continue; }
       toks.push({t:'word', v:w}); i = j; continue; }
     throw new Error('読み取れない文字があります: ' + c);
@@ -454,11 +458,18 @@ function likeMatch(value, pattern){
 function dispatch(name, positional, params, block, input, env, ctx){
   const lower = name.toLowerCase();
   const items = Array.isArray(input) ? input : (input == null ? [] : [input]);
-  if (lower === 'get-content' || lower === 'gc'){
+  if (lower === 'get-content' || lower === 'gc' || lower === 'cat' || lower === 'type'){
     if (!env.Log) throw new Error('このテーマでは Get-Content は使えません');
     let out = env.Log.slice();
     if (params['-tail'] !== undefined) out = out.slice(-Number(params['-tail']));
     return out;
+  }
+  if (lower === 'add-content'){
+    const fname = String(positional[0] || '');
+    const dest = Object.keys(env).find(k => k.toLowerCase() === fname.toLowerCase() || (k + '.log').toLowerCase() === fname.toLowerCase());
+    if (!dest) throw new Error('Add-Content の書き込み先が見つかりません: ' + fname);
+    for (const it of items) env[dest].push(String(it));
+    return [];
   }
   if (lower === 'get-childitem' || lower === 'gci' || lower === 'dir' || lower === 'ls'){
     let path = (positional[0] !== undefined ? positional[0] : (params['-path'] !== undefined ? params['-path'] : 'Downloads'));
@@ -571,6 +582,11 @@ function invokeFunction(ctx, env, name, args, namedParams){
   const savedVars = ctx.vars;
   ctx.vars = Object.assign({}, savedVars);
   const positional = (args || []).slice();
+  if (namedParams){
+    for (const k of Object.keys(namedParams)){
+      if (!fn.params.some(p => '-' + p.toLowerCase() === k)) throw new Error('パラメーター ' + k + ' が見つかりません');
+    }
+  }
   fn.params.forEach((p) => {
     const key = '-' + p.toLowerCase();
     if (namedParams && namedParams[key] !== undefined) ctx.vars[p] = namedParams[key];
@@ -625,7 +641,8 @@ function parseOperand(cur, ctx){
     }
     return v;
   }
-  if (tk.t === 'num' || tk.t === 'str') return tk.v;
+  if (tk.t === 'num') return tk.v;
+  if (tk.t === 'str') return tk.dq ? interpolate(tk.v, ctx) : tk.v;
   if (tk.t === 'word'){
     if (tk.v.toLowerCase() === 'get-date') return { __date: 0 };
     return tk.v;
@@ -640,6 +657,15 @@ function parseOperand(cur, ctx){
     return base;
   }
   throw new Error('条件の読み取りで止まりました');
+}
+function interpolate(s, ctx){
+  return s.replace(/\$([A-Za-z_][A-Za-z0-9_]*)/g, (m, name) => {
+    let v;
+    if (name === '_') v = ctx.currentItem;
+    else if (name in ctx.vars) v = ctx.vars[name];
+    else { const k = Object.keys(ctx.vars).find(x => x.toLowerCase() === name.toLowerCase()); v = k ? ctx.vars[k] : undefined; }
+    return v == null ? '' : String(v);
+  });
 }
 function unwrapVal(v){ return (v && typeof v === 'object' && '__date' in v) ? v.__date : v; }
 function compareVals(l, op, r){
@@ -665,7 +691,7 @@ function themeMakeEnv(theme){
   return makeEnv();
 }
 function themeToItem(theme, raw){
-  if (theme === 'log') return toLine(raw);
+  if (theme === 'log') return raw;
   return toFile(raw);
 }
 function simulate(quest, env, ctx){
@@ -758,15 +784,17 @@ function judge(quest, playerSrc, playerPreloadSrc){
    Catches functions that ignore $Days or cannot be called with -Days,
    which would otherwise only fail one stage later. */
 function runHiddenTest(quest, playerSrc){
-  const call = quest.hiddenTest.call;
-  const expEnv = themeMakeEnv(quest.theme); const expCtx = newCtx();
-  try { loadDefs(quest.solution, expEnv, expCtx); runProgram(call, expEnv, expCtx); }
-  catch (e) { return { pass:true }; }
-  const gotEnv = themeMakeEnv(quest.theme); const gotCtx = newCtx();
-  try { loadDefs(playerSrc, gotEnv, gotCtx); runProgram(call, gotEnv, gotCtx); }
-  catch (e) { return { pass:false, code:'hidden-named' }; }
-  const ok = JSON.stringify(stateSnapshot(expEnv)) === JSON.stringify(stateSnapshot(gotEnv));
-  return ok ? { pass:true } : { pass:false, code:'hidden-fixed' };
+  for (const call of quest.hiddenTest.calls){
+    const expEnv = themeMakeEnv(quest.theme); const expCtx = newCtx();
+    try { loadDefs(quest.solution, expEnv, expCtx); runProgram(call, expEnv, expCtx); }
+    catch (e) { continue; }
+    const gotEnv = themeMakeEnv(quest.theme); const gotCtx = newCtx();
+    try { loadDefs(playerSrc, gotEnv, gotCtx); runProgram(call, gotEnv, gotCtx); }
+    catch (e) { return { pass:false, code:'hidden-named' }; }
+    const ok = JSON.stringify(stateSnapshot(expEnv)) === JSON.stringify(stateSnapshot(gotEnv));
+    if (!ok) return { pass:false, code:'hidden-fixed' };
+  }
+  return { pass:true };
 }
 </script>
 <script>
@@ -775,8 +803,8 @@ function runHiddenTest(quest, playerSrc){
 const $ = id => document.getElementById(id);
 const wrap = $('wrap');
 let save = { cleared:{}, scripts:{}, auto:{} };
-try { const s = localStorage.getItem('pipeit-save-v2'); if (s) save = Object.assign(save, JSON.parse(s)); } catch (e) {}
-function persist(){ try { localStorage.setItem('pipeit-save-v2', JSON.stringify(save)); } catch (e) {} }
+try { const s = localStorage.getItem('pipeit-save-v3'); if (s) save = Object.assign(save, JSON.parse(s)); } catch (e) {}
+function persist(){ try { localStorage.setItem('pipeit-save-v3', JSON.stringify(save)); } catch (e) {} }
 /* sound: thick SE only, no BGM (user decision 2026-11-26) */
 let audioCtx = null;
 function ac(){ if (!audioCtx) { try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return null; } } if (audioCtx.state === 'suspended') audioCtx.resume(); return audioCtx; }
@@ -869,10 +897,9 @@ function envHtml(env){
   return h;
 }
 function logHtml(env){
-  const rows = arr => '<table>' + arr.map(x =>
-    `<tr><td class="r">${x.Time}</td><td class="r">${x.Level}</td><td class="r">${x.Source}</td><td class="n">${x.Message}</td></tr>`).join('') + '</table>';
-  let h = '<div class="folder">📄 server.log</div>' + (env.Log.length ? rows(env.Log) : '<div class="empty">（空です）</div>');
-  h += '<div class="folder">🚨 Alerts</div>' + (env.Alerts.length ? rows(env.Alerts) : '<div class="empty">（空です）</div>');
+  const lines = arr => '<div class="loglines">' + arr.map(x => String(x).replace(/</g, '&lt;')).join('\n') + '</div>';
+  let h = '<div class="folder">📄 server.log</div>' + (env.Log.length ? lines(env.Log) : '<div class="empty">（空です）</div>');
+  h += '<div class="folder">📄 alerts.log</div>' + (env.Alerts.length ? lines(env.Alerts) : '<div class="empty">（空です）</div>');
   return h;
 }
 function openQuest(q){
@@ -979,13 +1006,15 @@ $('btn-run').addEventListener('click', () => {
     if (next){ const b = $('btn-next'); b.classList.remove('hidden'); b.onclick = () => openQuest(next); }
   } else if (r.code === 'hidden-named'){
     seNg();
-    feedback('関数を -Days で呼び出す形になっていません。引数名を $Days にしてください（param($Days) の形でも構いません）。段階5では -Days で呼ばれるので、今のうちに直しておきましょう。', false);
+    const p = (q.hiddenTest && q.hiddenTest.param) || '引数';
+    feedback('関数を ' + p + ' の名前付きで呼び出す形になっていません。引数名を ' + p + ' にしてください（param(' + p + ') の形でも構いません）。段階5でも名前付きで呼ばれるので、今のうちに直しておきましょう。', false);
   } else if (r.code === 'hidden-fixed'){
     seNg();
-    feedback('日数を変えて試しても、結果が変わりませんでした。関数の中で $Days を使って絞り込んでいますか？（日数を直接書き込むと、段階5で別の日数で呼ばれたときに動きません）', false);
+    const p = (q.hiddenTest && q.hiddenTest.param) || '引数';
+    feedback('引数の値を変えて試しても、結果が変わりませんでした。関数の中で ' + p + ' を使って絞り込んでいますか？（値を直接書き込むと、別の値で呼ばれたときに動きません）', false);
   } else if (!r.funcOk){
     seNg();
-    feedback('関数の形になっていません。function で Move-OldFile を定義し、呼び出すところまで書いてください。', false);
+    feedback('関数の形になっていません。function で ' + q.requireFunction + ' を定義し、呼び出すところまで書いてください。', false);
   } else if (r.code === 'removed'){
     seNg();
     feedback('ファイルが完全に消えています。Remove-Item はごみ箱に入らず完全に消えてしまうので、移動には Move-Item を使います。消えたファイル： ' + r.removed.join('、'), false);
@@ -1011,19 +1040,20 @@ $('btn-advance').addEventListener('click', () => {
     const after = stateSnapshot(env);
     const dest = q.sim.destName;
     const moved = (after[dest] || []).filter(n => !(before[dest] || []).includes(n));
+    const verb = q.theme === 'log' ? 'に追加' : 'へ移動';
     $('out-panel').classList.remove('hidden');
     $('out-text').innerHTML = '— ' + q.sim.pastText + ' —\n' +
-      (moved.length ? '自動実行で ' + dest + ' へ移動：\n' + moved.join('\n') : '自動実行で移動したものはありません');
+      (moved.length ? '自動実行で ' + dest + ' ' + verb + '：\n' + moved.join('\n') : '自動実行で変化したものはありません');
     $('quest-env').innerHTML = envHtml(env);
   } catch (e) { feedback('実行エラー： ' + e.message, false); return; }
   if (r.pass){
     markCleared(q);
     seOk();
-    feedback('✔ クリア！ 登録したスクリプトが自動で片付けてくれました。このテーマは自動化済みです。<br><span style="font-size:12.5px;color:var(--sub)">実務メモ： Register-AutoRun はゲーム内専用コマンドです。実務ではタスクスケジューラに Register-ScheduledTask で登録します。なお、New-ScheduledTaskTrigger には毎月の指定がないため、毎月実行はタスクスケジューラの画面や schtasks /sc monthly で設定します。</span>' + (q.theme === 'files' ? '<br><span style="font-size:12.5px;color:var(--sub)">あと、共有資料.pdf のように「届いたばかりでも最終更新日が古い」ファイルは、更新日で判定すると片付け対象になります。</span>' : ''), true);
+    feedback('✔ クリア！ 登録したスクリプトが自動で片付けてくれました。このテーマは自動化済みです。<br><span style="font-size:12.5px;color:var(--sub)">実務メモ： Register-AutoRun はゲーム内専用コマンドです。実務ではタスクスケジューラに Register-ScheduledTask で登録します。なお、New-ScheduledTaskTrigger には毎月の指定がないため、毎月実行はタスクスケジューラの画面や schtasks /sc monthly で設定します。</span>' + (q.theme === 'files' ? '<br><span style="font-size:12.5px;color:var(--sub)">あと、共有資料.pdf のように「届いたばかりでも最終更新日が古い」ファイルは、更新日で判定すると片付け対象になります。</span>' : '<br><span style="font-size:12.5px;color:var(--sub)">あと、実務でログを調べるときの定番は Select-String です。ファイルを指定して、パターンに合う行だけを抜き出してくれます。</span>'), true);
     $('btn-advance').classList.add('hidden');
   } else {
     seNg();
-    let msg = '自動実行後の状態が依頼と違います。' + diffText(r);
+    let msg = '自動実行後の状態が依頼と違います。' + (q.sim.failHint || diffText(r));
     if (preload) msg += '<br><span style="font-size:12.5px;color:var(--sub)">読み込まれている段階4の関数：<br>' + preload.replace(/</g, '&lt;').replace(/\n/g, '<br>') + '</span>';
     feedback(msg, false);
     $('btn-fix4').classList.remove('hidden');
