@@ -116,6 +116,7 @@
       <textarea id="cmd-input" spellcheck="false" placeholder="ここにコマンドを入力"></textarea>
       <div class="chips" id="chips"></div>
       <button class="bigbtn" id="btn-run">▶ 実行する</button>
+      <button class="ghostbtn" id="btn-reset">↩ やり直す</button>
       <button class="bigbtn hidden" id="btn-advance" style="background:linear-gradient(180deg,#8be04e,#37c978)">▶▶ 1か月進める（自動実行）</button>
     </div>
     <div class="panel hidden" id="out-panel"><h3>出力</h3><div class="out" id="out-text"></div></div>
@@ -656,6 +657,7 @@ function markCleared(q){
   if (q.stage === 5) save.auto[q.theme] = true;
   persist();
 }
+$('btn-reset').addEventListener('click', () => { seTap(); openQuest(currentQuest); });
 $('btn-run').addEventListener('click', () => {
   const q = currentQuest; const src = $('cmd-input').value.trim();
   $('btn-next').classList.add('hidden');
