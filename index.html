@@ -344,6 +344,10 @@ function toEvent(e){
 function makeEventsEnv(){
   return { Events: baseEvents().map(toEvent) };
 }
+/* ---- theme: report (drives + events combined) ---- */
+function makeReportEnv(){
+  return { Drives: baseDrives().map(d => ({ Name:d.Name, Used:d.Used * GB, Free:d.Free * GB })), Events: baseEvents().map(toEvent) };
+}
 function fmtSize(bytes){ const kb = bytes / 1024; return (Math.round(kb * 10) / 10) + ' KB'; }
 const THEMES = [
   {id:'files',   name:'ファイル整理',           icon:'assets/obj-folder.png',  bg:'assets/bg-files.jpg',   ready:true},
@@ -355,7 +359,7 @@ const THEMES = [
   {id:'network', name:'ネットワーク疎通確認',   icon:'assets/obj-router.png',  bg:'assets/bg-network.jpg', ready:true},
   {id:'software',name:'ソフトウェア棚卸し',     icon:'assets/obj-software.png',bg:'assets/bg-software.jpg',ready:true},
   {id:'events',  name:'イベントログ監視',       icon:'assets/obj-warning.png', bg:'assets/bg-events.jpg',  ready:true},
-  {id:'report',  name:'定例レポート作成',       icon:'assets/obj-report.png',  bg:'assets/bg-report.jpg',  ready:false}
+  {id:'report',  name:'定例レポート作成',       icon:'assets/obj-report.png',  bg:'assets/bg-report.jpg',  ready:true}
 ];
 const STAGE_NAMES = ['単発コマンド','パイプライン','条件分岐・繰り返し','関数化・スクリプト化','自動実行'];
 const QUESTS = [
@@ -607,7 +611,34 @@ const QUESTS = [
       {TimeCreatedDays:0, Time:'08:12', Id:6009, Level:'情報', Source:'EventLog', Message:'Microsoft (R) Windows (R) が開始されました'}
     ]},
     clearMemo:'実務メモ： Register-AutoRun はゲーム内専用コマンドです。実務ではタスクスケジューラに Register-ScheduledTask で登録するか、監視ツールがイベントを集約します。この関数は対象IDの全件を毎回書き出す形なので、実務では「前回チェック以降の分だけ」を取る工夫（時刻で絞る）が要ります。あと、Get-EventLog という古いコマンドもありますが、今は Get-WinEvent が本命です。',
-    chips:['Register-AutoRun','{','Save-EventById -Id 7034','}'] }
+    chips:['Register-AutoRun','{','Save-EventById -Id 7034','}'] },
+  { id:'rep-1', theme:'report', stage:1, title:'エラーの件数を数える',
+    request:'「毎朝の日次レポートを作ろう。まず、イベントログ（System）のエラーの件数を数えてくれ。Get-WinEvent で取って、レベルが『エラー』のものを Measure-Object で数える」',
+    solution:"Get-WinEvent -LogName System | Where-Object { $_.Level -eq 'エラー' } | Measure-Object", judge:'output',
+    chips:['Get-WinEvent','-LogName','System','|','Where-Object','{','}',"$_.Level -eq 'エラー'",'Measure-Object'] },
+  { id:'rep-2', theme:'report', stage:2, title:'空きの少ないドライブを挙げる',
+    request:'「次に、空きが 10GB より少ないドライブを挙げてくれ。Get-PSDrive で取れる」',
+    solution:'Get-PSDrive | Where-Object { $_.Free -lt 10GB }', judge:'output',
+    chips:['Get-PSDrive','|','Where-Object','{','}','$_.Free -lt 10GB'] },
+  { id:'rep-3', theme:'report', stage:3, title:'日次レポートを組み立てる',
+    request:'「ではレポートファイル daily-report.log を組み立てよう。まず見出し『== ディスク ==』を書いて、空きが 10GB より少ないドライブの名前を書き、次に見出し『== エラー ==』を書いて、エラーのメッセージを全部書いてくれ」',
+    solution:"'== ディスク ==' | Add-Content daily-report.log\nGet-PSDrive | Where-Object { $_.Free -lt 10GB } | ForEach-Object { $_.Name } | Add-Content daily-report.log\n'== エラー ==' | Add-Content daily-report.log\nGet-WinEvent -LogName System | Where-Object { $_.Level -eq 'エラー' } | ForEach-Object { $_.Message } | Add-Content daily-report.log", judge:'state',
+    chips:['== ディスク ==','|','Add-Content','daily-report.log','Get-PSDrive','Where-Object','{','}','$_.Free -lt 10GB','ForEach-Object','$_.Name','== エラー ==','Get-WinEvent','-LogName','System',"$_.Level -eq 'エラー'",'$_.Message'] },
+  { id:'rep-4', theme:'report', stage:4, title:'レポート作成を関数にする',
+    request:'「この日次レポートの組み立てを、使い回せる関数にしてくれ。名前は New-DailyReport、引数 $File でレポートのファイル名を受け取る動きで。作ったら daily-report.log で実行してくれ」',
+    solution:"function New-DailyReport($File) { '== ディスク ==' | Add-Content $File; Get-PSDrive | Where-Object { $_.Free -lt 10GB } | ForEach-Object { $_.Name } | Add-Content $File; '== エラー ==' | Add-Content $File; Get-WinEvent -LogName System | Where-Object { $_.Level -eq 'エラー' } | ForEach-Object { $_.Message } | Add-Content $File }\nNew-DailyReport daily-report.log",
+    judge:'state', requireFunction:'New-DailyReport', hiddenTest:{ calls:['New-DailyReport -File weekly-report.log'], param:'$File' },
+    chips:['function','New-DailyReport','($File)','{','}','== ディスク ==','|','Add-Content','$File','Get-PSDrive','Where-Object','$_.Free -lt 10GB','ForEach-Object','$_.Name','== エラー ==','Get-WinEvent','-LogName','System',"$_.Level -eq 'エラー'",'$_.Message','daily-report.log'] },
+  { id:'rep-5', theme:'report', stage:5, title:'日次レポートを自動化する',
+    request:'「段階4で作った関数 New-DailyReport を、毎朝の自動実行に登録しよう。ゲーム内コマンド Register-AutoRun に、実行したいコマンドを { } で囲んで渡してくれ。ファイル名は daily-report.log で。登録したら『1日進める』で翌朝へ進め、新しい状態でレポートが作られるか確かめよう」',
+    solution:'Register-AutoRun { New-DailyReport daily-report.log }', judge:'state',
+    preload:"function New-DailyReport($File) { '== ディスク ==' | Add-Content $File; Get-PSDrive | Where-Object { $_.Free -lt 10GB } | ForEach-Object { $_.Name } | Add-Content $File; '== エラー ==' | Add-Content $File; Get-WinEvent -LogName System | Where-Object { $_.Level -eq 'エラー' } | ForEach-Object { $_.Message } | Add-Content $File }",
+    sim:{ label:'1日進める（自動実行）', pastText:'翌朝になりました', destName:'daily-report', home:'Events', failHint:'レポートの内容が期待と違います。空きが減ったドライブと、新しいエラーが入っているはずです', diskDeltas:[{Name:'G', dFreeGB:-5}], arrivals:[
+      {TimeCreatedDays:0, Time:'09:31', Id:7034, Level:'エラー', Source:'Service Control Manager', Message:'Print Spooler サービスが予期せず終了しました'},
+      {TimeCreatedDays:0, Time:'07:44', Id:1014, Level:'警告', Source:'DNS Client', Message:'名前 resolver.local の名前解決がタイムアウトしました'}
+    ]},
+    clearMemo:'実務メモ： Register-AutoRun はゲーム内専用コマンドです。実務ではタスクスケジューラに Register-ScheduledTask で登録し、レポートはメールで送ったり共有フォルダに置いたりして届けます。これで全10テーマ・50問が揃いました。手で打つ→パイプでつなぐ→条件で絞る→関数にする→自動で回す。この流れが身につけば、日常の運用はかなり楽になります。',
+    chips:['Register-AutoRun','{','New-DailyReport daily-report.log','}'] }
 ];
 
 /* ================= interpreter ================= */
@@ -1233,6 +1264,7 @@ function themeMakeEnv(theme){
   if (theme === 'network') return makeNetworkEnv();
   if (theme === 'software') return makeSoftwareEnv();
   if (theme === 'events') return makeEventsEnv();
+  if (theme === 'report') return makeReportEnv();
   return makeEnv();
 }
 function themeToItem(theme, raw){
@@ -1243,6 +1275,7 @@ function themeToItem(theme, raw){
   if (theme === 'network') return raw;
   if (theme === 'software') return toPackage(raw);
   if (theme === 'events') return toEvent(raw);
+  if (theme === 'report') return toEvent(raw);
   return toFile(raw);
 }
 function simulate(quest, env, ctx){
@@ -1458,6 +1491,7 @@ document.querySelectorAll('[data-back]').forEach(b => b.addEventListener('click'
 }));
 
 function envHtml(env){
+  if (env.Drives && env.Events) return drivesHtml(env) + eventsHtml(env);
   if (env.Log) return logHtml(env);
   if (env.Drives) return diskHtml(env);
   if (env.Processes) return processHtml(env);
