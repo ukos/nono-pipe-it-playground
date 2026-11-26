@@ -268,6 +268,29 @@ function toUser(d){ return { Name:d.Name, Enabled:d.Enabled, Description:d.Descr
 function makeUsersEnv(){
   return { Users: baseUsers().map(toUser) };
 }
+/* ---- theme: backup ---- */
+function baseBackupSet(){ return [
+  {Name:'売上集計.xlsx', Folder:'Data', Length:300, LastWriteTime:2},
+  {Name:'顧客リスト.csv', Folder:'Data', Length:150, LastWriteTime:1},
+  {Name:'議事録.docx', Folder:'Data', Length:80, LastWriteTime:3},
+  {Name:'見積書.docx', Folder:'Data', Length:60, LastWriteTime:6},
+  {Name:'在庫表.xlsx', Folder:'Data', Length:120, LastWriteTime:0},
+  {Name:'写真_現場.jpg', Folder:'Data', Length:3000, LastWriteTime:10},
+  {Name:'メモ.txt', Folder:'Data', Length:5, LastWriteTime:15},
+  {Name:'設計書.pdf', Folder:'Data', Length:2000, LastWriteTime:40},
+  {Name:'売上集計.xlsx', Folder:'Backup', Length:280, LastWriteTime:8},
+  {Name:'顧客リスト.csv', Folder:'Backup', Length:140, LastWriteTime:8},
+  {Name:'議事録.docx', Folder:'Backup', Length:75, LastWriteTime:9},
+  {Name:'設計書.pdf', Folder:'Backup', Length:2000, LastWriteTime:40}
+];}
+function toBackupFile(f){
+  return { Name:f.Name, Length: Math.round(f.Length * 1024), LastWriteTime:{ __date:-f.LastWriteTime }, Extension: f.Extension || f.Name.slice(f.Name.lastIndexOf('.')), Folder:f.Folder };
+}
+function makeBackupEnv(){
+  const env = { Data: [], Backup: [] };
+  for (const raw of baseBackupSet()) env[raw.Folder].push(toBackupFile(raw));
+  return env;
+}
 function fmtSize(bytes){ const kb = bytes / 1024; return (Math.round(kb * 10) / 10) + ' KB'; }
 const THEMES = [
   {id:'files',   name:'ファイル整理',           icon:'assets/obj-folder.png',  bg:'assets/bg-files.jpg',   ready:true},
@@ -275,7 +298,7 @@ const THEMES = [
   {id:'disk',    name:'ディスク棚卸し',         icon:'assets/obj-disk.png',    bg:'assets/bg-disk.jpg',    ready:true},
   {id:'process', name:'プロセス・サービス監視', icon:'assets/obj-gear.png',    bg:'assets/bg-process.jpg', ready:true},
   {id:'users',   name:'ユーザーアカウント管理', icon:'assets/obj-idbadge.png', bg:'assets/bg-users.jpg',   ready:true},
-  {id:'backup',  name:'バックアップ運用',       icon:'assets/obj-tape.png',    bg:'assets/bg-backup.jpg',  ready:false},
+  {id:'backup',  name:'バックアップ運用',       icon:'assets/obj-tape.png',    bg:'assets/bg-backup.jpg',  ready:true},
   {id:'network', name:'ネットワーク疎通確認',   icon:'assets/obj-router.png',  bg:'assets/bg-network.jpg', ready:false},
   {id:'software',name:'ソフトウェア棚卸し',     icon:'assets/obj-software.png',bg:'assets/bg-software.jpg',ready:false},
   {id:'events',  name:'イベントログ監視',       icon:'assets/obj-warning.png', bg:'assets/bg-events.jpg',  ready:false},
@@ -421,7 +444,37 @@ const QUESTS = [
       {Name:'newbie', Enabled:true, LastLogonDays:null, Description:'今週入社', SID:'S-1-5-21-3623811015-3361044348-30300820-1010'}
     ]},
     clearMemo:'実務メモ： Register-AutoRun はゲーム内専用コマンドです。実務ではタスクスケジューラに Register-ScheduledTask で登録します（New-ScheduledTaskTrigger には毎月の指定がないため、毎月実行はタスクスケジューラの画面や schtasks /sc monthly で設定）。あと、実務の棚卸しでは、無効化の前に人事の退職者リストと照合するのが鉄則です。ドメイン環境では Get-ADUser を使う場面も多くなります。未ログインのアカウント（LastLogon が空）は比較で「一番古い」として引っかかるので、自動化では必ず除外を確認してください（新人を初日に締め出さないために）。',
-    chips:['Register-AutoRun','{','Disable-StaleUser -Days 180','}'] }
+    chips:['Register-AutoRun','{','Disable-StaleUser -Days 180','}'] },
+  { id:'backup-1', theme:'backup', stage:1, title:'Dataフォルダの中身を見る',
+    request:'「バックアップの見直しをするから、まず Data フォルダの中身を全部見せてくれ」',
+    solution:'Get-ChildItem Data', judge:'output',
+    chips:['Get-ChildItem','Data'] },
+  { id:'backup-2', theme:'backup', stage:2, title:'初回のフルバックアップ',
+    request:'「Data の中身を全部、Backup フォルダにコピーしてくれ。初回のフルバックアップだ（元のファイルはそのまま残す）」',
+    solution:'Get-ChildItem Data | Copy-Item -Destination Backup', judge:'state',
+    chips:['Get-ChildItem','Data','|','Copy-Item','-Destination','Backup'] },
+  { id:'backup-3', theme:'backup', stage:3, title:'新しいものだけコピーし直す',
+    request:'「毎回全部コピーすると時間がかかる。7日以内に更新されたファイルだけ、Backup にコピーし直してくれ。1つずつ調べて、条件に合うものだけだ」',
+    solution:'Get-ChildItem Data | ForEach-Object { if ($_.LastWriteTime -ge (Get-Date).AddDays(-7)) { $_ | Copy-Item -Destination Backup } }', judge:'state',
+    clearMemo:'実務では robocopy の /MAXAGE（◯日以内に更新されたものだけ）で同じことをします。差分コピーはバックアップ運用の基本形です。',
+    chips:['Get-ChildItem','Data','|','ForEach-Object','{','}','if ($_.LastWriteTime -ge (Get-Date).AddDays(-7))','$_','Copy-Item','-Destination','Backup'] },
+  { id:'backup-4', theme:'backup', stage:4, title:'差分バックアップを関数にする',
+    request:'「この差分コピーを、使い回せる関数にしてくれ。名前は Copy-ChangedFile、引数 $Days で『何日以内に更新されたものか』の境界を受け取る動きで。作ったら 7日 で実行してくれ」',
+    solution:'function Copy-ChangedFile($Days) { $limit = (Get-Date).AddDays(-$Days); Get-ChildItem Data | Where-Object { $_.LastWriteTime -ge $limit } | Copy-Item -Destination Backup }\nCopy-ChangedFile 7',
+    judge:'state', requireFunction:'Copy-ChangedFile', hiddenTest:{ calls:['Copy-ChangedFile -Days 3'], param:'$Days' },
+    chips:['function','Copy-ChangedFile','($Days)','{','}','$limit = (Get-Date).AddDays(-$Days);','Get-ChildItem','Data','|','Where-Object','$_.LastWriteTime -ge $limit','Copy-Item','-Destination','Backup','7'] },
+  { id:'backup-5', theme:'backup', stage:5, title:'週次バックアップを自動化する',
+    request:'「段階4で作った関数 Copy-ChangedFile を、毎週の自動実行に登録しよう。ゲーム内コマンド Register-AutoRun に、実行したいコマンドを { } で囲んで渡してくれ。境界は 7日 で。登録したら『1週間進める』で次の週へ進め、新しく変わったファイルが自動でコピーされるか確かめよう」',
+    solution:'Register-AutoRun { Copy-ChangedFile -Days 7 }', judge:'state',
+    preload:'function Copy-ChangedFile($Days) { $limit = (Get-Date).AddDays(-$Days); Get-ChildItem Data | Where-Object { $_.LastWriteTime -ge $limit } | Copy-Item -Destination Backup }',
+    sim:{ label:'1週間進める（自動実行）', pastText:'1週間が経ちました', destName:'Backup', home:'Data', ageFiles:7, failHint:'コピーされたファイルが期待と違います。1週間経つと、境界の内と外が入れ替わります', arrivals:[
+      {Name:'売上集計.xlsx', Folder:'Data', Length:320, LastWriteTime:0},
+      {Name:'議事録.docx', Folder:'Data', Length:85, LastWriteTime:1},
+      {Name:'請求書.pdf', Folder:'Data', Length:200, LastWriteTime:0},
+      {Name:'写真_現場2.jpg', Folder:'Data', Length:2800, LastWriteTime:2}
+    ]},
+    clearMemo:'実務メモ： Register-AutoRun はゲーム内専用コマンドです。実務ではタスクスケジューラに Register-ScheduledTask で登録するか、robocopy を定期実行します。あと、バックアップは「取れているか」より「戻せるか」が本番です。定期的なリストア訓練まで含めて運用です。',
+    chips:['Register-AutoRun','{','Copy-ChangedFile -Days 7','}'] }
 ];
 
 /* ================= interpreter ================= */
@@ -705,8 +758,8 @@ function dispatch(name, positional, params, block, input, env, ctx, piped){
       if (cut >= 0){ pattern = path.slice(cut + 1); path = path.slice(0, cut); }
       else { pattern = path; path = 'Downloads'; }
     }
-    const folder = canonFolder(path);
-    if (!folder) throw new Error('フォルダ "' + path + '" はありません（Downloads / Archive / Trash）');
+    const folder = Object.keys(env).find(k => k.toLowerCase() === String(path).toLowerCase()) || canonFolder(path);
+    if (!folder || !env[folder]) throw new Error('フォルダ "' + path + '" はありません');
     let out = env[folder].slice();
     if (pattern) out = out.filter(f => likeMatch(f.Name, pattern));
     if (params['-filter'] !== undefined) out = out.filter(f => likeMatch(f.Name, params['-filter']));
@@ -818,6 +871,25 @@ function dispatch(name, positional, params, block, input, env, ctx, piped){
     }
     if (!piped) throw new Error((to ? '有効化' : '無効化') + 'するユーザーを指定してください（-Name か、パイプで渡してください）');
     for (const it of items) if (it && typeof it === 'object' && 'Enabled' in it) it.Enabled = to;
+    return [];
+  }
+  if (lower === 'copy-item' || lower === 'cp' || lower === 'copy'){
+    if (params['-whatif'] === true) return [];
+    const destName = params['-destination'] !== undefined ? params['-destination'] : undefined;
+    if (destName === undefined) throw new Error('コピー先を指定してください（-Destination）');
+    const dest = Object.keys(env).find(k => k.toLowerCase() === String(destName).toLowerCase());
+    if (!dest) throw new Error('コピー先フォルダが見つかりません: ' + destName);
+    let cpItems = items;
+    const ioC = params['-inputobject'];
+    if (ioC && typeof ioC === 'object') cpItems = [ioC];
+    if (!cpItems.length && positional[0] && typeof positional[0] === 'object' && 'Folder' in positional[0]) cpItems = [positional[0]];
+    if (!piped && !cpItems.length) throw new Error('コピーするファイルを指定してください（パイプで渡してください）');
+    for (const it of cpItems){
+      if (!it || typeof it !== 'object' || !('Folder' in it)) continue;
+      const clone = { ...it, Folder: dest };
+      const ix = env[dest].findIndex(f => f.Name === it.Name);
+      if (ix >= 0) env[dest][ix] = clone; else env[dest].push(clone);
+    }
     return [];
   }
   if (lower === 'register-autorun'){
@@ -981,19 +1053,25 @@ function themeMakeEnv(theme){
   if (theme === 'disk') return makeDiskEnv();
   if (theme === 'process') return makeProcessEnv();
   if (theme === 'users') return makeUsersEnv();
+  if (theme === 'backup') return makeBackupEnv();
   return makeEnv();
 }
 function themeToItem(theme, raw){
   if (theme === 'log') return raw;
   if (theme === 'process') return toProcess(raw);
   if (theme === 'users') return toUser(raw);
+  if (theme === 'backup') return toBackupFile(raw);
   return toFile(raw);
 }
 function simulate(quest, env, ctx){
   const sim = quest.sim;
-  if (sim.ageFiles) for (const f of FOLDERS) for (const file of env[f]) file.LastWriteTime.__date -= sim.days;
+  if (sim.ageFiles) for (const k of Object.keys(env)) for (const file of env[k]) if (file && typeof file === 'object' && file.LastWriteTime && '__date' in file.LastWriteTime) file.LastWriteTime.__date -= sim.ageFiles;
   const home = sim.home || 'Downloads';
-  for (const a of sim.arrivals || []) env[home].push(themeToItem(quest.theme, a));
+  for (const a of sim.arrivals || []){
+    const item = themeToItem(quest.theme, a);
+    const ix = (item && typeof item === 'object' && 'Name' in item) ? env[home].findIndex(x => x && typeof x === 'object' && x.Name === item.Name) : -1;
+    if (ix >= 0) env[home][ix] = item; else env[home].push(item);
+  }
   for (const d of sim.diskDeltas || []){
     const drv = (env.Drives || []).find(x => x.Name === d.Name);
     if (drv){ drv.Free += d.dFreeGB * GB; drv.Used -= d.dFreeGB * GB; }
@@ -1007,6 +1085,7 @@ function stateSnapshot(env){
   for (const f of Object.keys(env)) o[f] = env[f].map(it => {
     if (it && typeof it === 'object' && 'Status' in it) return itemName(it) + ':' + it.Status;
     if (it && typeof it === 'object' && 'Enabled' in it) return itemName(it) + ':' + it.Enabled;
+    if (it && typeof it === 'object' && 'Length' in it) return itemName(it) + ':' + it.Length;
     return itemName(it);
   }).slice().sort();
   return o;
@@ -1193,7 +1272,7 @@ function envHtml(env){
   if (env.Processes) return processHtml(env);
   if (env.Users) return usersHtml(env);
   let h = '';
-  for (const f of FOLDERS){
+  for (const f of Object.keys(env)){
     h += `<div class="folder">📁 ${f}</div>`;
     if (!env[f].length) h += '<div class="empty">（空です）</div>';
     else {
