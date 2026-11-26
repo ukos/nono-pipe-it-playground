@@ -322,6 +322,28 @@ function toPackage(p){
 function makeSoftwareEnv(){
   return { Packages: basePackages().map(toPackage) };
 }
+/* ---- theme: events ---- */
+function baseEvents(){ return [
+  {d:0, Time:'09:12', Id:7034, Level:'エラー', Source:'Service Control Manager', Message:'Print Spooler サービスが予期せず終了しました'},
+  {d:0, Time:'08:45', Id:1014, Level:'警告', Source:'DNS Client', Message:'名前 resolver.local の名前解決がタイムアウトしました'},
+  {d:0, Time:'08:30', Id:6009, Level:'情報', Source:'EventLog', Message:'Microsoft (R) Windows (R) が開始されました'},
+  {d:0, Time:'07:58', Id:41, Level:'エラー', Source:'Kernel-Power', Message:'システムは正常にシャットダウンする前に再起動しました'},
+  {d:1, Time:'15:20', Id:7034, Level:'エラー', Source:'Service Control Manager', Message:'Print Spooler サービスが予期せず終了しました'},
+  {d:1, Time:'11:03', Id:1530, Level:'警告', Source:'User Profile Service', Message:'レジストリ ハイブが他のプロセスによって使用されています'},
+  {d:1, Time:'09:41', Id:7045, Level:'情報', Source:'Service Control Manager', Message:'サービスがインストールされました: Update Orchestrator'},
+  {d:3, Time:'22:17', Id:7, Level:'エラー', Source:'Disk', Message:'デバイス Disk0 に不良ブロックがあります'},
+  {d:3, Time:'22:17', Id:51, Level:'警告', Source:'Disk', Message:'ページング操作中にエラーが検出されました'},
+  {d:5, Time:'18:02', Id:6006, Level:'情報', Source:'EventLog', Message:'イベント ログ サービスが停止されました'},
+  {d:7, Time:'10:26', Id:7034, Level:'エラー', Source:'Service Control Manager', Message:'Print Spooler サービスが予期せず終了しました'},
+  {d:7, Time:'10:25', Id:6013, Level:'情報', Source:'EventLog', Message:'システム稼働時間は 604800 秒です'}
+];}
+function toEvent(e){
+  const days = e.TimeCreatedDays !== undefined ? e.TimeCreatedDays : e.d;
+  return { TimeCreated:{ __date:-days }, Time:e.Time, Id:e.Id, Level:e.Level, Source:e.Source, Message:e.Message };
+}
+function makeEventsEnv(){
+  return { Events: baseEvents().map(toEvent) };
+}
 function fmtSize(bytes){ const kb = bytes / 1024; return (Math.round(kb * 10) / 10) + ' KB'; }
 const THEMES = [
   {id:'files',   name:'ファイル整理',           icon:'assets/obj-folder.png',  bg:'assets/bg-files.jpg',   ready:true},
@@ -332,7 +354,7 @@ const THEMES = [
   {id:'backup',  name:'バックアップ運用',       icon:'assets/obj-tape.png',    bg:'assets/bg-backup.jpg',  ready:true},
   {id:'network', name:'ネットワーク疎通確認',   icon:'assets/obj-router.png',  bg:'assets/bg-network.jpg', ready:true},
   {id:'software',name:'ソフトウェア棚卸し',     icon:'assets/obj-software.png',bg:'assets/bg-software.jpg',ready:true},
-  {id:'events',  name:'イベントログ監視',       icon:'assets/obj-warning.png', bg:'assets/bg-events.jpg',  ready:false},
+  {id:'events',  name:'イベントログ監視',       icon:'assets/obj-warning.png', bg:'assets/bg-events.jpg',  ready:true},
   {id:'report',  name:'定例レポート作成',       icon:'assets/obj-report.png',  bg:'assets/bg-report.jpg',  ready:false}
 ];
 const STAGE_NAMES = ['単発コマンド','パイプライン','条件分岐・繰り返し','関数化・スクリプト化','自動実行'];
@@ -557,7 +579,35 @@ const QUESTS = [
       {Name:'Chatwork', Version:'2.5', Publisher:'Chatwork', InstallDate:5}
     ]},
     clearMemo:'実務メモ： Register-AutoRun はゲーム内専用コマンドです。実務ではタスクスケジューラに Register-ScheduledTask で登録します。あと、古いソフトは「入っていること自体」が攻撃の入り口になります。特にサポートの終わったソフト（EOL）は、棚卸しで見つけたらアンインストールか更新が鉄則です。',
-    chips:['Register-AutoRun','{','Save-OldApp -Days 730','}'] }
+    chips:['Register-AutoRun','{','Save-OldApp -Days 730','}'] },
+  { id:'ev-1', theme:'events', stage:1, title:'イベントログを見る',
+    request:'「このPCのイベントログ（System）を見せてくれ。Get-WinEvent というコマンドで、-LogName System と指定する」',
+    solution:'Get-WinEvent -LogName System', judge:'output',
+    chips:['Get-WinEvent','-LogName','System'] },
+  { id:'ev-2', theme:'events', stage:2, title:'エラーだけを抜き出す',
+    request:'「イベントログの中から、レベルが『エラー』のものだけ見せてくれ。レベルは Level という項目に入っている」',
+    solution:"Get-WinEvent -LogName System | Where-Object { $_.Level -eq 'エラー' }", judge:'output',
+    chips:['Get-WinEvent','-LogName','System','|','Where-Object','{','}',"$_.Level -eq 'エラー'"] },
+  { id:'ev-3', theme:'events', stage:3, title:'繰り返すエラーを記録する',
+    request:'「イベントID 7034（サービスが予期せず終了）が何度も出ている。ID が 7034 のイベントのメッセージを spooler.log に記録してくれ。あとでまとめて報告する」',
+    solution:'Get-WinEvent -LogName System | Where-Object { $_.Id -eq 7034 } | ForEach-Object { $_.Message } | Add-Content spooler.log', judge:'state',
+    chips:['Get-WinEvent','-LogName','System','|','Where-Object','{','}','$_.Id -eq 7034','ForEach-Object','$_.Message','Add-Content','spooler.log'] },
+  { id:'ev-4', theme:'events', stage:4, title:'ID指定の記録を関数にする',
+    request:'「この『IDで指定したイベントのメッセージを記録する』処理を、使い回せる関数にしてくれ。名前は Save-EventById、引数 $Id でイベントIDを受け取る動きで。記録先は spooler.log で、作ったら 7034 で実行してくれ」',
+    solution:'function Save-EventById($Id) { Get-WinEvent -LogName System | Where-Object { $_.Id -eq $Id } | ForEach-Object { $_.Message } | Add-Content spooler.log }\nSave-EventById 7034',
+    judge:'state', requireFunction:'Save-EventById', hiddenTest:{ calls:['Save-EventById -Id 7'], param:'$Id' },
+    chips:['function','Save-EventById','($Id)','{','}','Get-WinEvent','-LogName','System','|','Where-Object','$_.Id -eq $Id','ForEach-Object','$_.Message','Add-Content','spooler.log','7034'] },
+  { id:'ev-5', theme:'events', stage:5, title:'毎朝のエラーチェックを自動化する',
+    request:'「段階4で作った関数 Save-EventById を、毎朝の自動実行に登録しよう。ゲーム内コマンド Register-AutoRun に、実行したいコマンドを { } で囲んで渡してくれ。ID は 7034 で。登録したら『1日進める』で翌朝へ進め、新しいエラーが記録されるか確かめよう」',
+    solution:'Register-AutoRun { Save-EventById -Id 7034 }', judge:'state',
+    preload:'function Save-EventById($Id) { Get-WinEvent -LogName System | Where-Object { $_.Id -eq $Id } | ForEach-Object { $_.Message } | Add-Content spooler.log }',
+    sim:{ label:'1日進める（自動実行）', pastText:'翌朝になりました', destName:'spooler', home:'Events', failHint:'記録されたメッセージが期待と違います。新しい 7034 が増えているはずです', ageEvents:1, arrivals:[
+      {TimeCreatedDays:0, Time:'10:47', Id:1001, Level:'エラー', Source:'Service Control Manager', Message:'BackupService サービスが予期せず終了しました'},
+      {TimeCreatedDays:0, Time:'09:05', Id:7034, Level:'エラー', Source:'Service Control Manager', Message:'Print Spooler サービスが予期せず終了しました'},
+      {TimeCreatedDays:0, Time:'08:12', Id:6009, Level:'情報', Source:'EventLog', Message:'Microsoft (R) Windows (R) が開始されました'}
+    ]},
+    clearMemo:'実務メモ： Register-AutoRun はゲーム内専用コマンドです。実務ではタスクスケジューラに Register-ScheduledTask で登録するか、監視ツールがイベントを集約します。この関数は対象IDの全件を毎回書き出す形なので、実務では「前回チェック以降の分だけ」を取る工夫（時刻で絞る）が要ります。あと、Get-EventLog という古いコマンドもありますが、今は Get-WinEvent が本命です。',
+    chips:['Register-AutoRun','{','Save-EventById -Id 7034','}'] }
 ];
 
 /* ================= interpreter ================= */
@@ -1007,6 +1057,13 @@ function dispatch(name, positional, params, block, input, env, ctx, piped){
     }
     return [res];
   }
+  if (lower === 'get-winevent'){
+    if (!env.Events) throw new Error('このテーマでは Get-WinEvent は使えません');
+    if (params['-logname'] !== undefined && String(params['-logname']).toLowerCase() !== 'system') throw new Error('このゲームで読めるのは System ログだけです');
+    let out = env.Events.slice();
+    if (params['-maxevents'] !== undefined) out = out.slice(0, Number(params['-maxevents']));
+    return out;
+  }
   if (lower === 'get-package'){
     if (!env.Packages) throw new Error('このテーマでは Get-Package は使えません');
     return env.Packages.slice().sort((a, b) => a.Name < b.Name ? -1 : 1);
@@ -1175,6 +1232,7 @@ function themeMakeEnv(theme){
   if (theme === 'backup') return makeBackupEnv();
   if (theme === 'network') return makeNetworkEnv();
   if (theme === 'software') return makeSoftwareEnv();
+  if (theme === 'events') return makeEventsEnv();
   return makeEnv();
 }
 function themeToItem(theme, raw){
@@ -1184,6 +1242,7 @@ function themeToItem(theme, raw){
   if (theme === 'backup') return toBackupFile(raw);
   if (theme === 'network') return raw;
   if (theme === 'software') return toPackage(raw);
+  if (theme === 'events') return toEvent(raw);
   return toFile(raw);
 }
 function simulate(quest, env, ctx){
@@ -1203,12 +1262,14 @@ function simulate(quest, env, ctx){
   for (const d of sim.hostDeltas || []){ const h = (env.Hosts || []).find(x => x.Name === d.Name); if (h) for (const k of Object.keys(d)) if (k !== 'Name') h[k] = d[k]; }
   for (const nh of sim.newHosts || []) (env.Hosts || []).push({ ...nh, Ports: { ...(nh.Ports || {}) } });
   if (sim.agePackages) for (const p of env.Packages || []) if (p.InstallDate) p.InstallDate.__date -= sim.agePackages;
+  if (sim.ageEvents) for (const e of env.Events || []) if (e.TimeCreated) e.TimeCreated.__date -= sim.ageEvents;
   if (ctx.autoRun && ctx.autoRun.block) runStatements(new Cur(ctx.autoRun.block), env, ctx, null);
   else if (ctx.autoRun) invokeFunction(ctx, env, ctx.autoRun.func, ctx.autoRun.args || [], ctx.autoRun.named);
 }
 function sigOf(it){
   if (it && typeof it === 'object'){
     if ('TcpTestSucceeded' in it) return itemName(it) + ':' + it.RemotePort + ':' + it.TcpTestSucceeded;
+    if ('Level' in it && 'Id' in it) return it.Level + ':' + it.Id + ':' + (it.TimeCreated ? it.TimeCreated.__date : '');
     if ('Status' in it) return itemName(it) + ':' + it.Status;
     if ('Enabled' in it) return itemName(it) + ':' + it.Enabled;
     if ('Length' in it) return itemName(it) + ':' + it.Length;
@@ -1403,6 +1464,7 @@ function envHtml(env){
   if (env.Users) return usersHtml(env);
   if (env.Hosts) return hostsHtml(env);
   if (env.Packages) return packagesHtml(env);
+  if (env.Events) return eventsHtml(env);
   let h = '';
   for (const f of Object.keys(env)){
     h += `<div class="folder">📁 ${f}</div>`;
@@ -1451,6 +1513,10 @@ function hostsHtml(env){
 function packagesHtml(env){
   return '<div class="folder">📦 インストール済みソフト</div><table>' + env.Packages.slice().sort((a, b) => a.Name < b.Name ? -1 : 1).map(p =>
     `<tr><td class="n">${p.Name}</td><td class="r">${p.Version}</td><td class="r">${p.Publisher}</td></tr>`).join('') + '</table>';
+}
+function eventsHtml(env){
+  return '<div class="folder">⚠️ イベントログ（System）</div><table>' + env.Events.map(e =>
+    `<tr><td class="n">${fmtDate(e.TimeCreated)} ${e.Time}</td><td class="r">${e.Level}</td><td class="r">ID:${e.Id}</td><td class="r">${e.Message}</td></tr>`).join('') + '</table>';
 }
 function openQuest(q){
   currentQuest = q;
@@ -1556,6 +1622,7 @@ function formatOutput(output){
     if (it && typeof it === 'object' && '_count' in it) return 'Count : ' + it._count;
     if (it && typeof it === 'object' && 'Used' in it) return `${it.Name} ドライブ　使用 ${fmtGB(it.Used)}　空き ${fmtGB(it.Free)}`;
     if (it && typeof it === 'object' && 'WS' in it) return `${it.Name}　メモリ ${fmtMB(it.WS)}　CPU ${it.CPU}`;
+    if (it && typeof it === 'object' && 'Level' in it && 'Id' in it) return `${fmtDate(it.TimeCreated)} ${it.Time}　${it.Level}　ID:${it.Id}　${it.Message}`;
     if (it && typeof it === 'object' && 'Version' in it && 'Publisher' in it) return `${it.Name}　${it.Version}　${it.Publisher}`;
     if (it && typeof it === 'object' && 'TcpTestSucceeded' in it) return `${it.ComputerName}　ポート ${it.RemotePort}　${it.TcpTestSucceeded ? '接続OK' : '接続できません'}`;
     if (it && typeof it === 'object' && 'PingSucceeded' in it) return `${it.ComputerName}　ping ${it.PingSucceeded ? 'Success' : 'TimedOut'}`;
