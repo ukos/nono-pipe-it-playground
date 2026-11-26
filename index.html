@@ -303,6 +303,25 @@ function baseHosts(){ return [
 function makeNetworkEnv(){
   return { targets: baseHosts().map(h => h.Name), Hosts: baseHosts().map(h => ({ ...h, Ports: { ...h.Ports } })) };
 }
+/* ---- theme: software ---- */
+function basePackages(){ return [
+  {Name:'Adobe Acrobat Reader', Version:'24.0', Publisher:'Adobe', InstallDate:30},
+  {Name:'Adobe Flash Player 32', Version:'32.0', Publisher:'Adobe', InstallDate:1500},
+  {Name:'Google Chrome', Version:'130.0', Publisher:'Google', InstallDate:10},
+  {Name:'Java 8', Version:'8.0.202', Publisher:'Oracle', InstallDate:1200},
+  {Name:'Microsoft Office 2021', Version:'16.0', Publisher:'Microsoft', InstallDate:200},
+  {Name:'Slack', Version:'4.38', Publisher:'Slack Technologies', InstallDate:60},
+  {Name:'WinZip 20', Version:'20.0', Publisher:'Corel', InstallDate:900},
+  {Name:'Zoom', Version:'6.0', Publisher:'Zoom', InstallDate:15},
+  {Name:'iTunes', Version:'12.12', Publisher:'Apple', InstallDate:710},
+  {Name:'ウイルスバスター', Version:'17.0', Publisher:'トレンドマイクロ', InstallDate:100}
+];}
+function toPackage(p){
+  return { Name:p.Name, Version:p.Version, Publisher:p.Publisher, InstallDate:{ __date:-p.InstallDate } };
+}
+function makeSoftwareEnv(){
+  return { Packages: basePackages().map(toPackage) };
+}
 function fmtSize(bytes){ const kb = bytes / 1024; return (Math.round(kb * 10) / 10) + ' KB'; }
 const THEMES = [
   {id:'files',   name:'ファイル整理',           icon:'assets/obj-folder.png',  bg:'assets/bg-files.jpg',   ready:true},
@@ -312,7 +331,7 @@ const THEMES = [
   {id:'users',   name:'ユーザーアカウント管理', icon:'assets/obj-idbadge.png', bg:'assets/bg-users.jpg',   ready:true},
   {id:'backup',  name:'バックアップ運用',       icon:'assets/obj-tape.png',    bg:'assets/bg-backup.jpg',  ready:true},
   {id:'network', name:'ネットワーク疎通確認',   icon:'assets/obj-router.png',  bg:'assets/bg-network.jpg', ready:true},
-  {id:'software',name:'ソフトウェア棚卸し',     icon:'assets/obj-software.png',bg:'assets/bg-software.jpg',ready:false},
+  {id:'software',name:'ソフトウェア棚卸し',     icon:'assets/obj-software.png',bg:'assets/bg-software.jpg',ready:true},
   {id:'events',  name:'イベントログ監視',       icon:'assets/obj-warning.png', bg:'assets/bg-events.jpg',  ready:false},
   {id:'report',  name:'定例レポート作成',       icon:'assets/obj-report.png',  bg:'assets/bg-report.jpg',  ready:false}
 ];
@@ -512,7 +531,33 @@ const QUESTS = [
       newHosts:[{Name:'chat-server', IPAddress:'192.168.1.60', Reachable:true, Latency:15, Ports:{5222:true}}],
       hostDeltas:[{Name:'mail-server', Reachable:false}] },
     clearMemo:'実務メモ： Register-AutoRun はゲーム内専用コマンドです。実務ではタスクスケジューラに Register-ScheduledTask でスクリプトを登録するか、Zabbix などの監視ツールを使います。あと、ping（ICMP）がファイアウォールで塞がれていると、サービスが生きていても疎通なしに見えます。Test-NetConnection のポート確認と合わせて判断するのが実務です。',
-    chips:['Register-AutoRun','{','Save-DownServer down-list.log','}'] }
+    chips:['Register-AutoRun','{','Save-DownServer down-list.log','}'] },
+  { id:'sw-1', theme:'software', stage:1, title:'インストール済みソフトの一覧',
+    request:'「このPCに入っているソフトを全部見せてくれ。棚卸しをする（Get-Package というコマンドを使う）」',
+    solution:'Get-Package', judge:'output',
+    chips:['Get-Package'] },
+  { id:'sw-2', theme:'software', stage:2, title:'ベンダーで絞り込む',
+    request:'「Adobe のソフトだけ見せてくれ。提供元は Publisher という項目に入っている」',
+    solution:"Get-Package | Where-Object { $_.Publisher -eq 'Adobe' }", judge:'output',
+    chips:['Get-Package','|','Where-Object','{','}',"$_.Publisher -eq 'Adobe'"] },
+  { id:'sw-3', theme:'software', stage:3, title:'古いソフトを記録する',
+    request:'「2年（730日）以上前から入ったままのソフトは、古くて危ないものが混ざっている。インストール日は InstallDate という項目だ。730日以上前のソフトの名前を old-apps.log に記録してくれ」',
+    solution:'Get-Package | Where-Object { $_.InstallDate -le (Get-Date).AddDays(-730) } | ForEach-Object { $_.Name } | Add-Content old-apps.log', judge:'state',
+    chips:['Get-Package','|','Where-Object','{','}','$_.InstallDate -le (Get-Date).AddDays(-730)','ForEach-Object','$_.Name','Add-Content','old-apps.log'] },
+  { id:'sw-4', theme:'software', stage:4, title:'古いソフトの記録を関数にする',
+    request:'「この『古いソフトを記録する』処理を、使い回せる関数にしてくれ。名前は Save-OldApp、引数 $Days で『何日以上前から入っているものか』の境界を受け取る動きで。作ったら 730 で実行してくれ」',
+    solution:'function Save-OldApp($Days) { $limit = (Get-Date).AddDays(-$Days); Get-Package | Where-Object { $_.InstallDate -le $limit } | ForEach-Object { $_.Name } | Add-Content old-apps.log }\nSave-OldApp 730',
+    judge:'state', requireFunction:'Save-OldApp', hiddenTest:{ calls:['Save-OldApp -Days 1000'], param:'$Days' },
+    chips:['function','Save-OldApp','($Days)','{','}','$limit = (Get-Date).AddDays(-$Days);','Get-Package','|','Where-Object','$_.InstallDate -le $limit','ForEach-Object','$_.Name','Add-Content','old-apps.log','730'] },
+  { id:'sw-5', theme:'software', stage:5, title:'月次の棚卸しを自動化する',
+    request:'「段階4で作った関数 Save-OldApp を、毎月の自動実行に登録しよう。ゲーム内コマンド Register-AutoRun に、実行したいコマンドを { } で囲んで渡してくれ。境界は 730日 で。登録したら『1か月進める』で次の棚卸しへ進め、古くなったソフトが記録されるか確かめよう」',
+    solution:'Register-AutoRun { Save-OldApp -Days 730 }', judge:'state',
+    preload:'function Save-OldApp($Days) { $limit = (Get-Date).AddDays(-$Days); Get-Package | Where-Object { $_.InstallDate -le $limit } | ForEach-Object { $_.Name } | Add-Content old-apps.log }',
+    sim:{ label:'1か月進める（自動実行）', pastText:'1か月が経ちました', destName:'old-apps', home:'Packages', failHint:'記録されたソフトが期待と違います。1か月経つと、境界を越えて「古い」側に入るソフトがあります', agePackages:30, arrivals:[
+      {Name:'Chatwork', Version:'2.5', Publisher:'Chatwork', InstallDate:5}
+    ]},
+    clearMemo:'実務メモ： Register-AutoRun はゲーム内専用コマンドです。実務ではタスクスケジューラに Register-ScheduledTask で登録します。あと、古いソフトは「入っていること自体」が攻撃の入り口になります。特にサポートの終わったソフト（EOL）は、棚卸しで見つけたらアンインストールか更新が鉄則です。',
+    chips:['Register-AutoRun','{','Save-OldApp -Days 730','}'] }
 ];
 
 /* ================= interpreter ================= */
@@ -962,6 +1007,10 @@ function dispatch(name, positional, params, block, input, env, ctx, piped){
     }
     return [res];
   }
+  if (lower === 'get-package'){
+    if (!env.Packages) throw new Error('このテーマでは Get-Package は使えません');
+    return env.Packages.slice().sort((a, b) => a.Name < b.Name ? -1 : 1);
+  }
   if (lower === 'register-autorun'){
     if (block){ ctx.autoRun = { block }; return []; }
     const func = positional[0];
@@ -1125,6 +1174,7 @@ function themeMakeEnv(theme){
   if (theme === 'users') return makeUsersEnv();
   if (theme === 'backup') return makeBackupEnv();
   if (theme === 'network') return makeNetworkEnv();
+  if (theme === 'software') return makeSoftwareEnv();
   return makeEnv();
 }
 function themeToItem(theme, raw){
@@ -1133,6 +1183,7 @@ function themeToItem(theme, raw){
   if (theme === 'users') return toUser(raw);
   if (theme === 'backup') return toBackupFile(raw);
   if (theme === 'network') return raw;
+  if (theme === 'software') return toPackage(raw);
   return toFile(raw);
 }
 function simulate(quest, env, ctx){
@@ -1151,6 +1202,7 @@ function simulate(quest, env, ctx){
   if (sim.ageUsers) for (const u of env.Users || []) if (u.LastLogon && u.LastLogon.__date <= -15) u.LastLogon.__date -= sim.ageUsers;
   for (const d of sim.hostDeltas || []){ const h = (env.Hosts || []).find(x => x.Name === d.Name); if (h) for (const k of Object.keys(d)) if (k !== 'Name') h[k] = d[k]; }
   for (const nh of sim.newHosts || []) (env.Hosts || []).push({ ...nh, Ports: { ...(nh.Ports || {}) } });
+  if (sim.agePackages) for (const p of env.Packages || []) if (p.InstallDate) p.InstallDate.__date -= sim.agePackages;
   if (ctx.autoRun && ctx.autoRun.block) runStatements(new Cur(ctx.autoRun.block), env, ctx, null);
   else if (ctx.autoRun) invokeFunction(ctx, env, ctx.autoRun.func, ctx.autoRun.args || [], ctx.autoRun.named);
 }
@@ -1350,6 +1402,7 @@ function envHtml(env){
   if (env.Processes) return processHtml(env);
   if (env.Users) return usersHtml(env);
   if (env.Hosts) return hostsHtml(env);
+  if (env.Packages) return packagesHtml(env);
   let h = '';
   for (const f of Object.keys(env)){
     h += `<div class="folder">📁 ${f}</div>`;
@@ -1394,6 +1447,10 @@ function hostsHtml(env){
   h += '<div class="folder">🖥️ サーバー一覧</div><table>' + env.Hosts.map(x =>
     `<tr><td class="n">${x.Name}</td><td class="r">${x.IPAddress}</td></tr>`).join('') + '</table>';
   return h;
+}
+function packagesHtml(env){
+  return '<div class="folder">📦 インストール済みソフト</div><table>' + env.Packages.slice().sort((a, b) => a.Name < b.Name ? -1 : 1).map(p =>
+    `<tr><td class="n">${p.Name}</td><td class="r">${p.Version}</td><td class="r">${p.Publisher}</td></tr>`).join('') + '</table>';
 }
 function openQuest(q){
   currentQuest = q;
@@ -1499,6 +1556,7 @@ function formatOutput(output){
     if (it && typeof it === 'object' && '_count' in it) return 'Count : ' + it._count;
     if (it && typeof it === 'object' && 'Used' in it) return `${it.Name} ドライブ　使用 ${fmtGB(it.Used)}　空き ${fmtGB(it.Free)}`;
     if (it && typeof it === 'object' && 'WS' in it) return `${it.Name}　メモリ ${fmtMB(it.WS)}　CPU ${it.CPU}`;
+    if (it && typeof it === 'object' && 'Version' in it && 'Publisher' in it) return `${it.Name}　${it.Version}　${it.Publisher}`;
     if (it && typeof it === 'object' && 'TcpTestSucceeded' in it) return `${it.ComputerName}　ポート ${it.RemotePort}　${it.TcpTestSucceeded ? '接続OK' : '接続できません'}`;
     if (it && typeof it === 'object' && 'PingSucceeded' in it) return `${it.ComputerName}　ping ${it.PingSucceeded ? 'Success' : 'TimedOut'}`;
     if (it && typeof it === 'object' && 'Status' in it && 'IPAddress' in it) return `${it.Address}　${it.IPAddress}　${it.Status}${it.ResponseTime != null ? '　' + it.ResponseTime + 'ms' : ''}`;
