@@ -225,12 +225,36 @@ function baseDrives(){ return [
 function makeDiskEnv(){
   return { Drives: baseDrives().map(d => ({ Name:d.Name, Used:d.Used * GB, Free:d.Free * GB })), Report: [] };
 }
+/* ---- theme: process ---- */
+const MB = 1024 * 1024;
+function baseProcesses(){ return [
+  {Name:'sqlservr',       Id:1200, WS:2400, CPU:1500.5},
+  {Name:'chrome',         Id:2400, WS:1200, CPU:820.3},
+  {Name:'backup-agent',   Id:3100, WS:640,  CPU:120.0},
+  {Name:'Teams',          Id:3300, WS:580,  CPU:300.2},
+  {Name:'svchost',        Id:900,  WS:180,  CPU:45.0},
+  {Name:'explorer',       Id:4100, WS:150,  CPU:60.5},
+  {Name:'powershell',     Id:4600, WS:90,   CPU:12.4},
+  {Name:'notepad',        Id:4800, WS:25,   CPU:1.2}
+];}
+function baseServices(){ return [
+  {Name:'Spooler',       Status:'Running'},
+  {Name:'W32Time',       Status:'Stopped'},
+  {Name:'BackupService', Status:'Running'},
+  {Name:'MonitorAgent',  Status:'Stopped'},
+  {Name:'UpdateService', Status:'Stopped'},
+  {Name:'WinRM',         Status:'Running'}
+];}
+function toProcess(d){ return { Name:d.Name, Id:d.Id, WS:d.WS * MB, CPU:d.CPU }; }
+function makeProcessEnv(){
+  return { Processes: baseProcesses().map(toProcess), Services: baseServices().map(s => ({...s})) };
+}
 function fmtSize(bytes){ const kb = bytes / 1024; return (Math.round(kb * 10) / 10) + ' KB'; }
 const THEMES = [
   {id:'files',   name:'ファイル整理',           icon:'assets/obj-folder.png',  bg:'assets/bg-files.jpg',   ready:true},
   {id:'log',     name:'ログ調査',               icon:'assets/obj-log.png',     bg:'assets/bg-log.jpg',     ready:true},
   {id:'disk',    name:'ディスク棚卸し',         icon:'assets/obj-disk.png',    bg:'assets/bg-disk.jpg',    ready:true},
-  {id:'process', name:'プロセス・サービス監視', icon:'assets/obj-gear.png',    bg:'assets/bg-process.jpg', ready:false},
+  {id:'process', name:'プロセス・サービス監視', icon:'assets/obj-gear.png',    bg:'assets/bg-process.jpg', ready:true},
   {id:'users',   name:'ユーザーアカウント管理', icon:'assets/obj-idbadge.png', bg:'assets/bg-users.jpg',   ready:false},
   {id:'backup',  name:'バックアップ運用',       icon:'assets/obj-tape.png',    bg:'assets/bg-backup.jpg',  ready:false},
   {id:'network', name:'ネットワーク疎通確認',   icon:'assets/obj-router.png',  bg:'assets/bg-network.jpg', ready:false},
@@ -266,6 +290,7 @@ const QUESTS = [
       {Name:'work_tmp.tmp',   Length:300, LastWriteTime:40,  Extension:'.tmp'},
       {Name:'共有資料.pdf',   Length:500, LastWriteTime:120, Extension:'.pdf'}
     ]},
+    clearMemo:'実務メモ： Register-AutoRun はゲーム内専用コマンドです。実務ではタスクスケジューラに Register-ScheduledTask で登録します。なお、New-ScheduledTaskTrigger には毎月の指定がないため、毎月実行はタスクスケジューラの画面や schtasks /sc monthly で設定します。あと、共有資料.pdf のように「届いたばかりでも最終更新日が古い」ファイルは、更新日で判定すると片付け対象になります。',
     chips:['Register-AutoRun','{','Move-OldFile -Days 90','}'] },
   { id:'log-1', theme:'log', stage:1, title:'ログの直近を見る',
     request:'「今朝からサーバーが重いという話だ。まず server.log の直近5行を見せてくれ」',
@@ -294,6 +319,7 @@ const QUESTS = [
       '12:12 ERROR 決済 決済キュー障害: 処理が停止',
       '12:20 WARN アプリ メモリ使用率88%'
     ]},
+    clearMemo:'実務メモ： Register-AutoRun はゲーム内専用コマンドです。実務ではタスクスケジューラに Register-ScheduledTask で登録します（毎時実行は -RepetitionInterval で指定）。あと、実務でログを調べるときの定番は Select-String です。ファイルを指定して、パターンに合う行だけを抜き出してくれます。',
     chips:['Register-AutoRun','{','Get-Content','server.log','|','Where-Object',"$_ -like '12:* ERROR 決済 *'",'Add-Content','alerts.log','}'] },
   { id:'disk-1', theme:'disk', stage:1, title:'ドライブを全部見る',
     request:'「来週の棚卸しに使うから、このPCのドライブを全部見せてくれ」',
@@ -319,7 +345,35 @@ const QUESTS = [
     sim:{ label:'1か月進める（自動実行）', pastText:'1か月が経ちました', destName:'Report', verb:'に追加', failHint:'report.log の中身が期待と違います。1か月で空きが減ったドライブも対象に入ります', diskDeltas:[
       {Name:'C', dFreeGB:-7}, {Name:'D', dFreeGB:-10}, {Name:'G', dFreeGB:-6}, {Name:'H', dFreeGB:-11}
     ]},
-    chips:['Register-AutoRun','{','Check-DiskSpace -Limit 10GB','}'] }
+    clearMemo:'実務メモ： Register-AutoRun はゲーム内専用コマンドです。実務ではタスクスケジューラに Register-ScheduledTask で登録します。なお、New-ScheduledTaskTrigger には毎月の指定がないため、毎月実行はタスクスケジューラの画面や schtasks /sc monthly で設定します。あと、実物の Get-PSDrive はファイルシステム以外（レジストリや環境変数など）のドライブも返します。ディスクだけを見たいときは Get-PSDrive -PSProvider FileSystem と指定します。',
+    chips:['Register-AutoRun','{','Check-DiskSpace -Limit 10GB','}'] },
+  { id:'proc-1', theme:'process', stage:1, title:'動いているプロセスを全部見る',
+    request:'「このPCで今動いているプロセスを全部見せてくれ」',
+    solution:'Get-Process', judge:'output',
+    chips:['Get-Process'] },
+  { id:'proc-2', theme:'process', stage:2, title:'メモリを食うプロセス',
+    request:'「メモリ（WS）を500MBより多く使っているプロセスを、使っている順に並べて見せてくれ」',
+    solution:'Get-Process | Where-Object { $_.WS -gt 500MB } | Sort-Object WS -Descending', judge:'output',
+    chips:['Get-Process','|','Where-Object','{','}','$_.WS -gt 500MB','Sort-Object','WS','-Descending'] },
+  { id:'proc-3', theme:'process', stage:3, title:'止まっているサービスを起こす',
+    request:'「サービスの一覧で、止まっている（Stopped）ものがあったら全部起動してくれ。1つずつ調べて、止まっているものだけだ」',
+    solution:"Get-Service | ForEach-Object { if ($_.Status -eq 'Stopped') { Start-Service } }", judge:'state',
+    chips:['Get-Service','|','ForEach-Object','{','}',"if ($_.Status -eq 'Stopped')",'Start-Service'] },
+  { id:'proc-4', theme:'process', stage:4, title:'重いプロセス止めを関数にする',
+    request:'「メモリを食いすぎるプロセスを止める処理を、使い回せる関数にしてくれ。名前は Stop-HungryProcess、引数 $Limit で『WS がこれより大きいプロセスを止める』という境界を受け取る動きで。作ったら 1GB で実行してくれ」',
+    solution:'function Stop-HungryProcess($Limit) { Get-Process | Where-Object { $_.WS -gt $Limit } | Stop-Process }\nStop-HungryProcess 1GB',
+    judge:'state', requireFunction:'Stop-HungryProcess', hiddenTest:{ calls:['Stop-HungryProcess -Limit 500MB'], param:'$Limit' },
+    chips:['function','Stop-HungryProcess','($Limit)','{','}','Get-Process','|','Where-Object','$_.WS -gt $Limit','Stop-Process','1GB'] },
+  { id:'proc-5', theme:'process', stage:5, title:'重いプロセス止めを自動化する',
+    request:'「段階4で作った関数 Stop-HungryProcess を、毎時の自動実行に登録しよう。ゲーム内コマンド Register-AutoRun に、実行したいコマンドを { } で囲んで渡してくれ。境界は 1GB で。登録したら『1時間進める』で次の1時間へ進め、新しく重くなったプロセスも自動で止まるか確かめよう」',
+    solution:'Register-AutoRun { Stop-HungryProcess -Limit 1GB }', judge:'state',
+    preload:'function Stop-HungryProcess($Limit) { Get-Process | Where-Object { $_.WS -gt $Limit } | Stop-Process }',
+    sim:{ label:'1時間進める（自動実行）', pastText:'1時間が経ちました', destName:'Processes', home:'Processes', goneFrom:'Processes', goneLabel:'自動実行で止まったプロセス：', failHint:'残っているプロセスが期待と違います。新しく現れた重いプロセスも対象です', arrivals:[
+      {Name:'report-generator', Id:5100, WS:1800, CPU:400.0},
+      {Name:'photo-editor', Id:5200, WS:300, CPU:50.0}
+    ]},
+    clearMemo:'実務メモ： Register-AutoRun はゲーム内専用コマンドです。実務ではタスクスケジューラに Register-ScheduledTask で登録します。あと、実務でプロセスを止めるときは、業務への影響を先に確認するのが鉄則です（このゲームの sqlservr のような基幹プロセスは特に）。',
+    chips:['Register-AutoRun','{','Stop-HungryProcess -Limit 1GB','}'] }
 ];
 
 /* ================= interpreter ================= */
@@ -529,6 +583,25 @@ function dispatch(name, positional, params, block, input, env, ctx){
   if (lower === 'get-psdrive' || lower === 'gdr'){
     if (!env.Drives) throw new Error('このテーマでは Get-PSDrive は使えません');
     return env.Drives.slice();
+  }
+  if (lower === 'get-process' || lower === 'gps'){
+    if (!env.Processes) throw new Error('このテーマでは Get-Process は使えません');
+    return env.Processes.slice();
+  }
+  if (lower === 'get-service' || lower === 'gsv'){
+    if (!env.Services) throw new Error('このテーマでは Get-Service は使えません');
+    return env.Services.slice();
+  }
+  if (lower === 'start-service'){
+    for (const it of items) if (it && typeof it === 'object' && 'Status' in it) it.Status = 'Running';
+    return [];
+  }
+  if (lower === 'stop-process'){
+    if (env.Processes) for (const it of items){
+      const i = env.Processes.indexOf(it);
+      if (i >= 0) env.Processes.splice(i, 1);
+    }
+    return [];
   }
   if (lower === 'get-childitem' || lower === 'gci' || lower === 'dir' || lower === 'ls'){
     let path = (positional[0] !== undefined ? positional[0] : (params['-path'] !== undefined ? params['-path'] : 'Downloads'));
@@ -749,10 +822,12 @@ function itemName(x){
 function themeMakeEnv(theme){
   if (theme === 'log') return makeLogEnv();
   if (theme === 'disk') return makeDiskEnv();
+  if (theme === 'process') return makeProcessEnv();
   return makeEnv();
 }
 function themeToItem(theme, raw){
   if (theme === 'log') return raw;
+  if (theme === 'process') return toProcess(raw);
   return toFile(raw);
 }
 function simulate(quest, env, ctx){
@@ -769,7 +844,9 @@ function simulate(quest, env, ctx){
 }
 function stateSnapshot(env){
   const o = {};
-  for (const f of Object.keys(env)) o[f] = env[f].map(itemName).slice().sort();
+  for (const f of Object.keys(env)) o[f] = env[f].map(it =>
+    (it && typeof it === 'object' && 'Status' in it) ? itemName(it) + ':' + it.Status : itemName(it)
+  ).slice().sort();
   return o;
 }
 function outputSignature(output){
@@ -951,6 +1028,7 @@ document.querySelectorAll('[data-back]').forEach(b => b.addEventListener('click'
 function envHtml(env){
   if (env.Log) return logHtml(env);
   if (env.Drives) return diskHtml(env);
+  if (env.Processes) return processHtml(env);
   let h = '';
   for (const f of FOLDERS){
     h += `<div class="folder">📁 ${f}</div>`;
@@ -975,6 +1053,14 @@ function diskHtml(env){
   h += '<div class="folder">📄 report.log</div>' + (env.Report.length
     ? '<div class="loglines">' + env.Report.map(x => String(x).replace(/</g, '&lt;')).join('\n') + '</div>'
     : '<div class="empty">（空です）</div>');
+  return h;
+}
+function fmtMB(bytes){ return (Math.round(bytes / (1024 * 1024) * 10) / 10) + ' MB'; }
+function processHtml(env){
+  let h = '<div class="folder">⚙️ プロセス</div><table>' + env.Processes.map(p =>
+    `<tr><td class="n">${p.Name}</td><td class="r">ID ${p.Id}</td><td class="r">メモリ ${fmtMB(p.WS)}</td></tr>`).join('') + '</table>';
+  h += '<div class="folder">🧩 サービス</div><table>' + env.Services.map(s =>
+    `<tr><td class="n">${s.Name}</td><td class="r">${s.Status === 'Running' ? '🟢 Running' : '🔴 Stopped'}</td></tr>`).join('') + '</table>';
   return h;
 }
 function openQuest(q){
@@ -1080,6 +1166,8 @@ function formatOutput(output){
   return output.map(it => {
     if (it && typeof it === 'object' && '_count' in it) return 'Count : ' + it._count;
     if (it && typeof it === 'object' && 'Used' in it) return `${it.Name} ドライブ　使用 ${fmtGB(it.Used)}　空き ${fmtGB(it.Free)}`;
+    if (it && typeof it === 'object' && 'WS' in it) return `${it.Name}　メモリ ${fmtMB(it.WS)}　CPU ${it.CPU}`;
+    if (it && typeof it === 'object' && 'Status' in it) return `${it.Name}　${it.Status}`;
     if (it && typeof it === 'object' && 'Name' in it) return `${it.Name}　${fmtSize(it.Length)}　${fmtDate(it.LastWriteTime)}`;
     if (it && typeof it === 'object' && 'Message' in it) return `${it.Time}　${it.Level}　${it.Source}　${it.Message}`;
     return String(it);
@@ -1178,15 +1266,21 @@ $('btn-advance').addEventListener('click', () => {
     const dest = q.sim.destName;
     const moved = (after[dest] || []).filter(n => !(before[dest] || []).includes(n));
     const verb = q.sim.verb || 'へ移動';
+    let changeText;
+    if (q.sim.goneFrom){
+      const gone = (before[q.sim.goneFrom] || []).filter(n => !(after[q.sim.goneFrom] || []).includes(n));
+      changeText = gone.length ? (q.sim.goneLabel || '自動実行で無くなったもの：') + '\n' + gone.join('\n') : '自動実行で変化したものはありません';
+    } else {
+      changeText = moved.length ? '自動実行で ' + dest + ' ' + verb + '：\n' + moved.join('\n') : '自動実行で変化したものはありません';
+    }
     $('out-panel').classList.remove('hidden');
-    $('out-text').innerHTML = '— ' + q.sim.pastText + ' —\n' +
-      (moved.length ? '自動実行で ' + dest + ' ' + verb + '：\n' + moved.join('\n') : '自動実行で変化したものはありません');
+    $('out-text').innerHTML = '— ' + q.sim.pastText + ' —\n' + changeText;
     $('quest-env').innerHTML = envHtml(env);
   } catch (e) { feedback('実行エラー： ' + e.message, false); return; }
   if (r.pass){
     markCleared(q);
     seOk();
-    feedback('✔ クリア！ 登録したスクリプトが自動で片付けてくれました。このテーマは自動化済みです。<br><span style="font-size:12.5px;color:var(--sub)">実務メモ： Register-AutoRun はゲーム内専用コマンドです。実務ではタスクスケジューラに Register-ScheduledTask で登録します。なお、New-ScheduledTaskTrigger には毎月の指定がないため、毎月実行はタスクスケジューラの画面や schtasks /sc monthly で設定します。</span>' + (q.theme === 'files' ? '<br><span style="font-size:12.5px;color:var(--sub)">あと、共有資料.pdf のように「届いたばかりでも最終更新日が古い」ファイルは、更新日で判定すると片付け対象になります。</span>' : '<br><span style="font-size:12.5px;color:var(--sub)">あと、実務でログを調べるときの定番は Select-String です。ファイルを指定して、パターンに合う行だけを抜き出してくれます。</span>'), true);
+    feedback('✔ クリア！ 登録したスクリプトが自動で片付けてくれました。このテーマは自動化済みです。' + (q.clearMemo ? '<br><span style="font-size:12.5px;color:var(--sub)">' + q.clearMemo + '</span>' : ''), true);
     $('btn-advance').classList.add('hidden');
   } else {
     seNg();
