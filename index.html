@@ -249,13 +249,30 @@ function toProcess(d){ return { Name:d.Name, Id:d.Id, WS:d.WS * MB, CPU:d.CPU };
 function makeProcessEnv(){
   return { Processes: baseProcesses().map(toProcess), Services: baseServices().map(s => ({...s})) };
 }
+/* ---- theme: users ---- */
+function baseUsers(){ return [
+  {Name:'Administrator', Enabled:true,  LastLogonDays:300},
+  {Name:'backup-admin',  Enabled:true,  LastLogonDays:30},
+  {Name:'guest-trainee', Enabled:true,  LastLogonDays:250},
+  {Name:'hanako.qa',     Enabled:false, LastLogonDays:500},
+  {Name:'ito',           Enabled:true,  LastLogonDays:160},
+  {Name:'kobayashi',     Enabled:true,  LastLogonDays:120},
+  {Name:'sato',          Enabled:true,  LastLogonDays:200},
+  {Name:'suzuki',        Enabled:true,  LastLogonDays:5},
+  {Name:'tanaka',        Enabled:true,  LastLogonDays:2},
+  {Name:'yamada',        Enabled:true,  LastLogonDays:400}
+];}
+function toUser(d){ return { Name:d.Name, Enabled:d.Enabled, LastLogon:{ __date: -d.LastLogonDays } }; }
+function makeUsersEnv(){
+  return { Users: baseUsers().map(toUser) };
+}
 function fmtSize(bytes){ const kb = bytes / 1024; return (Math.round(kb * 10) / 10) + ' KB'; }
 const THEMES = [
   {id:'files',   name:'ファイル整理',           icon:'assets/obj-folder.png',  bg:'assets/bg-files.jpg',   ready:true},
   {id:'log',     name:'ログ調査',               icon:'assets/obj-log.png',     bg:'assets/bg-log.jpg',     ready:true},
   {id:'disk',    name:'ディスク棚卸し',         icon:'assets/obj-disk.png',    bg:'assets/bg-disk.jpg',    ready:true},
   {id:'process', name:'プロセス・サービス監視', icon:'assets/obj-gear.png',    bg:'assets/bg-process.jpg', ready:true},
-  {id:'users',   name:'ユーザーアカウント管理', icon:'assets/obj-idbadge.png', bg:'assets/bg-users.jpg',   ready:false},
+  {id:'users',   name:'ユーザーアカウント管理', icon:'assets/obj-idbadge.png', bg:'assets/bg-users.jpg',   ready:true},
   {id:'backup',  name:'バックアップ運用',       icon:'assets/obj-tape.png',    bg:'assets/bg-backup.jpg',  ready:false},
   {id:'network', name:'ネットワーク疎通確認',   icon:'assets/obj-router.png',  bg:'assets/bg-network.jpg', ready:false},
   {id:'software',name:'ソフトウェア棚卸し',     icon:'assets/obj-software.png',bg:'assets/bg-software.jpg',ready:false},
@@ -374,7 +391,34 @@ const QUESTS = [
       {Name:'photo-editor', Id:5200, WS:300, CPU:50.0}
     ]},
     clearMemo:'実務メモ： Register-AutoRun はゲーム内専用コマンドです。実務ではタスクスケジューラに Register-ScheduledTask で登録します。あと、他ユーザーのプロセスを止めるときは -Force がないと確認を求められ、自動実行では止まってしまうことがあります。止めたら記録を残すのも実務の作法です。sqlservr のような基幹は、メモリが大きくても止めないのが鉄則です。',
-    chips:['Register-AutoRun','{','Stop-HungryProcess -Limit 1GB','}'] }
+    chips:['Register-AutoRun','{','Stop-HungryProcess -Limit 1GB','}'] },
+  { id:'user-1', theme:'users', stage:1, title:'ローカルユーザーを全部見る',
+    request:'「来月の棚卸しに使うから、このPCのローカルユーザーアカウントを全部見せてくれ」',
+    solution:'Get-LocalUser', judge:'output',
+    chips:['Get-LocalUser'] },
+  { id:'user-2', theme:'users', stage:2, title:'長くログインしていない人',
+    request:'「180日以上ログインしていないアカウントを抜き出してくれ」',
+    solution:'Get-LocalUser | Where-Object { $_.LastLogon -le (Get-Date).AddDays(-180) }', judge:'output',
+    chips:['Get-LocalUser','|','Where-Object','{','}','$_.LastLogon -le (Get-Date).AddDays(-180)'] },
+  { id:'user-3', theme:'users', stage:3, title:'使われていないアカウントを無効化する',
+    request:'「有効（Enabled）なのに180日以上ログインしていないアカウントは、無効化してくれ。1つずつ調べて、条件に合うものだけだ。ただし Administrator は基幹の管理者アカウントだから、条件に合っても絶対に無効化するな（締め出されたら終わりだ）」',
+    solution:"Get-LocalUser | ForEach-Object { if ($_.Enabled -eq $true -and $_.LastLogon -le (Get-Date).AddDays(-180) -and $_.Name -ne 'Administrator') { Disable-LocalUser -Name $_.Name } }", judge:'state',
+    clearMemo:'実務では、Get-LocalUser | Where-Object { 条件 } | Disable-LocalUser という形（状態で絞って、そのままパイプで渡す）で書くのが定番です。',
+    chips:['Get-LocalUser','|','ForEach-Object','{','}',"if ($_.Enabled -eq $true -and $_.LastLogon -le (Get-Date).AddDays(-180) -and $_.Name -ne 'Administrator')",'Disable-LocalUser -Name $_.Name'] },
+  { id:'user-4', theme:'users', stage:4, title:'棚卸しの無効化を関数にする',
+    request:'「この無効化を、使い回せる関数にしてくれ。名前は Disable-StaleUser、引数 $Days で『何日以上ログインしていないか』の境界を受け取る動きで。Administrator の除外も忘れずに。作ったら 180日 で実行してくれ」',
+    solution:"function Disable-StaleUser($Days) { Get-LocalUser | Where-Object { $_.Enabled -eq $true -and $_.LastLogon -le (Get-Date).AddDays(-$Days) -and $_.Name -ne 'Administrator' } | Disable-LocalUser }\nDisable-StaleUser 180",
+    judge:'state', requireFunction:'Disable-StaleUser', hiddenTest:{ calls:['Disable-StaleUser -Days 90'], param:'$Days' },
+    chips:['function','Disable-StaleUser','($Days)','{','}','Get-LocalUser','|','Where-Object',"$_.Enabled -eq $true -and $_.LastLogon -le (Get-Date).AddDays(-$Days) -and $_.Name -ne 'Administrator'",'Disable-LocalUser','180'] },
+  { id:'user-5', theme:'users', stage:5, title:'棚卸しを自動化する',
+    request:'「段階4で作った関数 Disable-StaleUser を、毎月の自動実行に登録しよう。ゲーム内コマンド Register-AutoRun に、実行したいコマンドを { } で囲んで渡してくれ。境界は 180日 で。登録したら『1か月進める』で次の月へ進め、境界を越えたアカウントが自動で無効化されるか確かめよう」',
+    solution:'Register-AutoRun { Disable-StaleUser -Days 180 }', judge:'state',
+    preload:"function Disable-StaleUser($Days) { Get-LocalUser | Where-Object { $_.Enabled -eq $true -and $_.LastLogon -le (Get-Date).AddDays(-$Days) -and $_.Name -ne 'Administrator' } | Disable-LocalUser }",
+    sim:{ label:'1か月進める（自動実行）', pastText:'1か月が経ちました', destName:'Users', home:'Users', ageUsers:30, stateKey:'Users', stateLabel:'自動実行で変わったアカウント：', failHint:'無効化されたアカウントが期待と違います。1か月経って境界を越えた人も対象です。Administrator は対象外のままです', arrivals:[
+      {Name:'newbie', Enabled:true, LastLogonDays:0}
+    ]},
+    clearMemo:'実務メモ： Register-AutoRun はゲーム内専用コマンドです。実務ではタスクスケジューラに Register-ScheduledTask で登録します（New-ScheduledTaskTrigger には毎月の指定がないため、毎月実行はタスクスケジューラの画面や schtasks /sc monthly で設定）。あと、実務の棚卸しでは、無効化の前に人事の退職者リストと照合するのが鉄則です。ドメイン環境では Get-ADUser を使う場面も多くなります。',
+    chips:['Register-AutoRun','{','Disable-StaleUser -Days 180','}'] }
 ];
 
 /* ================= interpreter ================= */
@@ -566,6 +610,9 @@ function canonFolder(name){
 function resolveVar(tk, item, ctx, cur){
   let base;
   if (tk.v === '_') base = (ctx.currentItem !== undefined ? ctx.currentItem : item);
+  else if (tk.v.toLowerCase() === 'true') base = true;
+  else if (tk.v.toLowerCase() === 'false') base = false;
+  else if (tk.v.toLowerCase() === 'null') base = null;
   else base = ctx.vars[tk.v];
   while (cur && cur.peek() && cur.peek().t === '.'){
     cur.next(); const w = cur.next();
@@ -731,6 +778,25 @@ function dispatch(name, positional, params, block, input, env, ctx, piped){
     }
     return [];
   }
+  if (lower === 'get-localuser'){
+    if (!env.Users) throw new Error('このテーマでは Get-LocalUser は使えません');
+    return env.Users.slice().sort((a, b) => a.Name.toLowerCase() < b.Name.toLowerCase() ? -1 : 1);
+  }
+  if (lower === 'disable-localuser' || lower === 'enable-localuser'){
+    if (params['-whatif'] === true) return [];
+    if (!env.Users) throw new Error('このテーマでは ' + name + ' は使えません');
+    const to = (lower === 'enable-localuser');
+    const targetName = params['-name'] !== undefined ? params['-name'] : (typeof positional[0] === 'string' ? positional[0] : undefined);
+    if (targetName !== undefined){
+      const u = env.Users.find(x => x.Name.toLowerCase() === String(targetName).toLowerCase());
+      if (!u) throw new Error('ユーザーが見つかりません: ' + targetName);
+      u.Enabled = to;
+      return [];
+    }
+    if (!piped) throw new Error((to ? '有効化' : '無効化') + 'するユーザーを指定してください（-Name か、パイプで渡してください）');
+    for (const it of items) if (it && typeof it === 'object' && 'Enabled' in it) it.Enabled = to;
+    return [];
+  }
   if (lower === 'register-autorun'){
     if (block){ ctx.autoRun = { block }; return []; }
     const func = positional[0];
@@ -817,12 +883,7 @@ function parseOperand(cur, ctx){
   }
   if (tk.t === '.'){ const w = cur.next(); return '.' + (w ? w.v : ''); }
   if (tk.t === 'var'){
-    let base = (tk.v === '_') ? ctx.currentItem : ctx.vars[tk.v];
-    while (cur.peek() && cur.peek().t === '.'){
-      cur.next(); const w = cur.next();
-      if (w && w.t === 'word') base = propOf(base, w.v);
-    }
-    return base;
+    return resolveVar(tk, ctx.currentItem, ctx, cur);
   }
   throw new Error('条件の読み取りで止まりました');
 }
@@ -881,11 +942,13 @@ function themeMakeEnv(theme){
   if (theme === 'log') return makeLogEnv();
   if (theme === 'disk') return makeDiskEnv();
   if (theme === 'process') return makeProcessEnv();
+  if (theme === 'users') return makeUsersEnv();
   return makeEnv();
 }
 function themeToItem(theme, raw){
   if (theme === 'log') return raw;
   if (theme === 'process') return toProcess(raw);
+  if (theme === 'users') return toUser(raw);
   return toFile(raw);
 }
 function simulate(quest, env, ctx){
@@ -897,14 +960,17 @@ function simulate(quest, env, ctx){
     const drv = (env.Drives || []).find(x => x.Name === d.Name);
     if (drv){ drv.Free += d.dFreeGB * GB; drv.Used -= d.dFreeGB * GB; }
   }
+  if (sim.ageUsers) for (const u of env.Users || []) u.LastLogon.__date -= sim.ageUsers;
   if (ctx.autoRun && ctx.autoRun.block) runStatements(new Cur(ctx.autoRun.block), env, ctx, null);
   else if (ctx.autoRun) invokeFunction(ctx, env, ctx.autoRun.func, [], ctx.autoRun.named);
 }
 function stateSnapshot(env){
   const o = {};
-  for (const f of Object.keys(env)) o[f] = env[f].map(it =>
-    (it && typeof it === 'object' && 'Status' in it) ? itemName(it) + ':' + it.Status : itemName(it)
-  ).slice().sort();
+  for (const f of Object.keys(env)) o[f] = env[f].map(it => {
+    if (it && typeof it === 'object' && 'Status' in it) return itemName(it) + ':' + it.Status;
+    if (it && typeof it === 'object' && 'Enabled' in it) return itemName(it) + ':' + it.Enabled;
+    return itemName(it);
+  }).slice().sort();
   return o;
 }
 function outputSignature(output){
@@ -1087,6 +1153,7 @@ function envHtml(env){
   if (env.Log) return logHtml(env);
   if (env.Drives) return diskHtml(env);
   if (env.Processes) return processHtml(env);
+  if (env.Users) return usersHtml(env);
   let h = '';
   for (const f of FOLDERS){
     h += `<div class="folder">📁 ${f}</div>`;
@@ -1120,6 +1187,10 @@ function processHtml(env){
   h += '<div class="folder">🧩 サービス</div><table>' + env.Services.map(s =>
     `<tr><td class="n">${s.Name}</td><td class="r">${s.StartType}</td><td class="r">${s.Status === 'Running' ? '🟢 Running' : '🔴 Stopped'}</td></tr>`).join('') + '</table>';
   return h;
+}
+function usersHtml(env){
+  return '<div class="folder">👤 ローカルユーザー</div><table>' + env.Users.map(u =>
+    `<tr><td class="n">${u.Name}</td><td class="r">${u.Enabled ? '🟢 有効' : '🔴 無効'}</td><td class="r">最終ログイン ${fmtDate(u.LastLogon)}</td></tr>`).join('') + '</table>';
 }
 function openQuest(q){
   currentQuest = q;
@@ -1226,6 +1297,7 @@ function formatOutput(output){
     if (it && typeof it === 'object' && 'Used' in it) return `${it.Name} ドライブ　使用 ${fmtGB(it.Used)}　空き ${fmtGB(it.Free)}`;
     if (it && typeof it === 'object' && 'WS' in it) return `${it.Name}　メモリ ${fmtMB(it.WS)}　CPU ${it.CPU}`;
     if (it && typeof it === 'object' && 'Status' in it) return `${it.Name}　${it.Status}`;
+    if (it && typeof it === 'object' && 'Enabled' in it) return `${it.Name}　${it.Enabled ? '有効' : '無効'}　最終ログイン ${fmtDate(it.LastLogon)}`;
     if (it && typeof it === 'object' && 'Name' in it) return `${it.Name}　${fmtSize(it.Length)}　${fmtDate(it.LastWriteTime)}`;
     if (it && typeof it === 'object' && 'Message' in it) return `${it.Time}　${it.Level}　${it.Source}　${it.Message}`;
     return String(it);
@@ -1325,7 +1397,12 @@ $('btn-advance').addEventListener('click', () => {
     const moved = (after[dest] || []).filter(n => !(before[dest] || []).includes(n));
     const verb = q.sim.verb || 'へ移動';
     let changeText;
-    if (q.sim.goneFrom){
+    if (q.sim.stateKey){
+      const bk = q.sim.stateKey;
+      const changed = (after[bk] || []).filter(n => !(before[bk] || []).includes(n))
+        .map(n => n.replace(/:(true|false)$/, (m, v) => v === 'false' ? ' を無効化' : ' を有効化'));
+      changeText = changed.length ? (q.sim.stateLabel || '自動実行で変わったもの：') + '\n' + changed.join('\n') : '自動実行で変化したものはありません';
+    } else if (q.sim.goneFrom){
       const gone = (before[q.sim.goneFrom] || []).filter(n => !(after[q.sim.goneFrom] || []).includes(n));
       changeText = gone.length ? (q.sim.goneLabel || '自動実行で無くなったもの：') + '\n' + gone.join('\n') : '自動実行で変化したものはありません';
     } else {
