@@ -250,19 +250,21 @@ function makeProcessEnv(){
   return { Processes: baseProcesses().map(toProcess), Services: baseServices().map(s => ({...s})) };
 }
 /* ---- theme: users ---- */
+const SID_PREFIX = 'S-1-5-21-3623811015-3361044348-30300820-';
 function baseUsers(){ return [
-  {Name:'Administrator', Enabled:true,  LastLogonDays:300},
-  {Name:'backup-admin',  Enabled:true,  LastLogonDays:30},
-  {Name:'guest-trainee', Enabled:true,  LastLogonDays:250},
-  {Name:'hanako.qa',     Enabled:false, LastLogonDays:500},
-  {Name:'ito',           Enabled:true,  LastLogonDays:160},
-  {Name:'kobayashi',     Enabled:true,  LastLogonDays:120},
-  {Name:'sato',          Enabled:true,  LastLogonDays:200},
-  {Name:'suzuki',        Enabled:true,  LastLogonDays:5},
-  {Name:'tanaka',        Enabled:true,  LastLogonDays:2},
-  {Name:'yamada',        Enabled:true,  LastLogonDays:400}
+  {Name:'Administrator', Enabled:true,  LastLogonDays:300, Description:'緊急用の管理者', SID:SID_PREFIX + '500'},
+  {Name:'backup-admin',  Enabled:true,  LastLogonDays:30,  Description:'管理者（予備）', SID:SID_PREFIX + '1000'},
+  {Name:'guest-trainee', Enabled:true,  LastLogonDays:250, Description:'研修用ゲスト', SID:SID_PREFIX + '1001'},
+  {Name:'hanako.qa',     Enabled:false, LastLogonDays:500, Description:'QA用', SID:SID_PREFIX + '1002'},
+  {Name:'ito',           Enabled:true,  LastLogonDays:160, Description:'開発部', SID:SID_PREFIX + '1003'},
+  {Name:'kobayashi',     Enabled:true,  LastLogonDays:120, Description:'総務部', SID:SID_PREFIX + '1004'},
+  {Name:'sato',          Enabled:true,  LastLogonDays:200, Description:'営業部', SID:SID_PREFIX + '1005'},
+  {Name:'shinjin',       Enabled:true,  LastLogonDays:null, Description:'来週入社予定', SID:SID_PREFIX + '1006'},
+  {Name:'suzuki',        Enabled:true,  LastLogonDays:5,   Description:'開発部', SID:SID_PREFIX + '1007'},
+  {Name:'tanaka',        Enabled:true,  LastLogonDays:2,   Description:'営業部', SID:SID_PREFIX + '1008'},
+  {Name:'yamada',        Enabled:true,  LastLogonDays:400, Description:'営業部（退職済み）', SID:SID_PREFIX + '1009'}
 ];}
-function toUser(d){ return { Name:d.Name, Enabled:d.Enabled, LastLogon:{ __date: -d.LastLogonDays } }; }
+function toUser(d){ return { Name:d.Name, Enabled:d.Enabled, Description:d.Description || '', SID:d.SID || '', LastLogon: d.LastLogonDays == null ? null : { __date: -d.LastLogonDays } }; }
 function makeUsersEnv(){
   return { Users: baseUsers().map(toUser) };
 }
@@ -397,27 +399,28 @@ const QUESTS = [
     solution:'Get-LocalUser', judge:'output',
     chips:['Get-LocalUser'] },
   { id:'user-2', theme:'users', stage:2, title:'長くログインしていない人',
-    request:'「180日以上ログインしていないアカウントを抜き出してくれ」',
+    request:'「180日以上ログインしていないアカウントを抜き出してくれ。最終ログインは LastLogon という項目に入っている（ふだんの表示には出ない項目だ。Select-Object で選べば見られる）」',
     solution:'Get-LocalUser | Where-Object { $_.LastLogon -le (Get-Date).AddDays(-180) }', judge:'output',
     chips:['Get-LocalUser','|','Where-Object','{','}','$_.LastLogon -le (Get-Date).AddDays(-180)'] },
   { id:'user-3', theme:'users', stage:3, title:'使われていないアカウントを無効化する',
-    request:'「有効（Enabled）なのに180日以上ログインしていないアカウントは、無効化してくれ。1つずつ調べて、条件に合うものだけだ。ただし Administrator は基幹の管理者アカウントだから、条件に合っても絶対に無効化するな（締め出されたら終わりだ）」',
-    solution:"Get-LocalUser | ForEach-Object { if ($_.Enabled -eq $true -and $_.LastLogon -le (Get-Date).AddDays(-180) -and $_.Name -ne 'Administrator') { Disable-LocalUser -Name $_.Name } }", judge:'state',
-    clearMemo:'実務では、Get-LocalUser | Where-Object { 条件 } | Disable-LocalUser という形（状態で絞って、そのままパイプで渡す）で書くのが定番です。',
-    chips:['Get-LocalUser','|','ForEach-Object','{','}',"if ($_.Enabled -eq $true -and $_.LastLogon -le (Get-Date).AddDays(-180) -and $_.Name -ne 'Administrator')",'Disable-LocalUser -Name $_.Name'] },
+    request:'「有効（Enabled）なのに180日以上ログインしていないアカウントは、無効化してくれ。1つずつ調べて、条件に合うものだけだ。ただし注意が2つ。Administrator はこのPCで唯一の緊急用の管理者アカウントだから、条件に合っても絶対に無効化するな（緊急用は普段ログインしないのが普通だ）。それと、まだ一度もログインしていないアカウント（LastLogon が空のもの）も対象外だ。無効化したアカウント名は、記録として disable-list.log に残してくれ」',
+    solution:"Get-LocalUser | ForEach-Object { if ($_.Enabled -and $null -ne $_.LastLogon -and $_.LastLogon -le (Get-Date).AddDays(-180) -and $_.Name -ne 'Administrator') { Disable-LocalUser -Name $_.Name; $_.Name | Add-Content disable-list.log } }", judge:'state',
+    clearMemo:'実務では、Get-LocalUser | Where-Object { 条件 } | Disable-LocalUser という形（状態で絞って、そのままパイプで渡す）で書くのが定番です。組み込みの Administrator かどうかは、SID が -500 で終わるかでも判定できます（$_.SID -like \'*-500\'）。あと、Disable-LocalUser には管理者権限が必要です。',
+    chips:['Get-LocalUser','|','ForEach-Object','{','}',"if ($_.Enabled -and $null -ne $_.LastLogon -and $_.LastLogon -le (Get-Date).AddDays(-180) -and $_.Name -ne 'Administrator')",'Disable-LocalUser -Name $_.Name',';','$_.Name','Add-Content','disable-list.log'] },
   { id:'user-4', theme:'users', stage:4, title:'棚卸しの無効化を関数にする',
-    request:'「この無効化を、使い回せる関数にしてくれ。名前は Disable-StaleUser、引数 $Days で『何日以上ログインしていないか』の境界を受け取る動きで。Administrator の除外も忘れずに。作ったら 180日 で実行してくれ」',
-    solution:"function Disable-StaleUser($Days) { Get-LocalUser | Where-Object { $_.Enabled -eq $true -and $_.LastLogon -le (Get-Date).AddDays(-$Days) -and $_.Name -ne 'Administrator' } | Disable-LocalUser }\nDisable-StaleUser 180",
+    request:'「この無効化を、使い回せる関数にしてくれ。名前は Disable-StaleUser、引数 $Days で『何日以上ログインしていないか』の境界を受け取る動きで。Administrator（緊急用の管理者）と、まだ一度もログインしていないアカウントの除外も忘れずに。作ったら 180日 で実行してくれ」',
+    solution:"function Disable-StaleUser($Days) { $limit = (Get-Date).AddDays(-$Days); Get-LocalUser | Where-Object { $_.Enabled -and $null -ne $_.LastLogon -and $_.LastLogon -le $limit -and $_.Name -ne 'Administrator' } | Disable-LocalUser }\nDisable-StaleUser 180",
     judge:'state', requireFunction:'Disable-StaleUser', hiddenTest:{ calls:['Disable-StaleUser -Days 90'], param:'$Days' },
-    chips:['function','Disable-StaleUser','($Days)','{','}','Get-LocalUser','|','Where-Object',"$_.Enabled -eq $true -and $_.LastLogon -le (Get-Date).AddDays(-$Days) -and $_.Name -ne 'Administrator'",'Disable-LocalUser','180'] },
+    clearMemo:'基準日は $limit のように先に1回だけ計算するのが作法です（条件の中で Get-Date を呼ぶと、件数ぶんだけ基準がずれます）。あと、$null との比較は $null を左に書きます（右に書くと、相手が配列のときに誤判定するためです）。',
+    chips:['function','Disable-StaleUser','($Days)','{','}','$limit = (Get-Date).AddDays(-$Days);','Get-LocalUser','|','Where-Object',"$_.Enabled -and $null -ne $_.LastLogon -and $_.LastLogon -le $limit -and $_.Name -ne 'Administrator'",'Disable-LocalUser','180'] },
   { id:'user-5', theme:'users', stage:5, title:'棚卸しを自動化する',
     request:'「段階4で作った関数 Disable-StaleUser を、毎月の自動実行に登録しよう。ゲーム内コマンド Register-AutoRun に、実行したいコマンドを { } で囲んで渡してくれ。境界は 180日 で。登録したら『1か月進める』で次の月へ進め、境界を越えたアカウントが自動で無効化されるか確かめよう」',
     solution:'Register-AutoRun { Disable-StaleUser -Days 180 }', judge:'state',
-    preload:"function Disable-StaleUser($Days) { Get-LocalUser | Where-Object { $_.Enabled -eq $true -and $_.LastLogon -le (Get-Date).AddDays(-$Days) -and $_.Name -ne 'Administrator' } | Disable-LocalUser }",
-    sim:{ label:'1か月進める（自動実行）', pastText:'1か月が経ちました', destName:'Users', home:'Users', ageUsers:30, stateKey:'Users', stateLabel:'自動実行で変わったアカウント：', failHint:'無効化されたアカウントが期待と違います。1か月経って境界を越えた人も対象です。Administrator は対象外のままです', arrivals:[
-      {Name:'newbie', Enabled:true, LastLogonDays:0}
+    preload:"function Disable-StaleUser($Days) { $limit = (Get-Date).AddDays(-$Days); Get-LocalUser | Where-Object { $_.Enabled -and $null -ne $_.LastLogon -and $_.LastLogon -le $limit -and $_.Name -ne 'Administrator' } | Disable-LocalUser }",
+    sim:{ label:'1か月進める（自動実行）', pastText:'1か月が経ちました', destName:'Users', home:'Users', ageUsers:30, stateKey:'Users', stateLabel:'自動実行で変わったアカウント：', failHint:'無効化されたアカウントが期待と違います。1か月経って境界を越えた人も対象です。Administrator と、まだログインしていない新人は対象外のままです', arrivals:[
+      {Name:'newbie', Enabled:true, LastLogonDays:null, Description:'今週入社', SID:'S-1-5-21-3623811015-3361044348-30300820-1010'}
     ]},
-    clearMemo:'実務メモ： Register-AutoRun はゲーム内専用コマンドです。実務ではタスクスケジューラに Register-ScheduledTask で登録します（New-ScheduledTaskTrigger には毎月の指定がないため、毎月実行はタスクスケジューラの画面や schtasks /sc monthly で設定）。あと、実務の棚卸しでは、無効化の前に人事の退職者リストと照合するのが鉄則です。ドメイン環境では Get-ADUser を使う場面も多くなります。',
+    clearMemo:'実務メモ： Register-AutoRun はゲーム内専用コマンドです。実務ではタスクスケジューラに Register-ScheduledTask で登録します（New-ScheduledTaskTrigger には毎月の指定がないため、毎月実行はタスクスケジューラの画面や schtasks /sc monthly で設定）。あと、実務の棚卸しでは、無効化の前に人事の退職者リストと照合するのが鉄則です。ドメイン環境では Get-ADUser を使う場面も多くなります。未ログインのアカウント（LastLogon が空）は比較で「一番古い」として引っかかるので、自動化では必ず除外を確認してください（新人を初日に締め出さないために）。',
     chips:['Register-AutoRun','{','Disable-StaleUser -Days 180','}'] }
 ];
 
@@ -429,6 +432,7 @@ function tokenize(src){
     if (c === ' ' || c === '\t' || c === '\r'){ i++; continue; }
     if (c === '\n' || c === ';'){ toks.push({t:'sep'}); i++; continue; }
     if (c === '|'){ toks.push({t:'pipe'}); i++; continue; }
+    if (c === '='){ toks.push({t:'='}); i++; continue; }
     if (c === '{' || c === '}' || c === '(' || c === ')' || c === ','){ toks.push({t:c}); i++; continue; }
     if (c === '.' && !/[0-9]/.test(src[i+1] || '')){ toks.push({t:'.'}); i++; continue; }
     if (c === "'" || c === '"'){ let j = i + 1, s = ''; while (j < src.length && src[j] !== c){ s += src[j]; j++; }
@@ -501,6 +505,12 @@ function runStatements(cur, env, ctx, input){
     if (tk.t === '}') break;
     if (tk.t === 'word' && tk.v.toLowerCase() === 'function'){ parseFunctionDef(cur, ctx); value = []; continue; }
     if (tk.t === 'word' && tk.v.toLowerCase() === 'if'){ value = parseIf(cur, env, ctx, value); continue; }
+    if (tk.t === 'var' && cur.toks[cur.i + 1] && cur.toks[cur.i + 1].t === '='){
+      cur.next(); cur.next();
+      ctx.vars[tk.v] = parseOr(cur, ctx);
+      value = []; ctx.output = [];
+      continue;
+    }
     if (tk.t === 'var' || tk.t === 'num' || tk.t === 'str' || tk.t === '('){
       const v0 = parseOr(cur, ctx);
       if (cur.peek() && cur.peek().t === 'pipe'){
@@ -636,8 +646,8 @@ function dispatch(name, positional, params, block, input, env, ctx, piped){
   if (lower === 'add-content'){
     const fname = String(positional[0] || '');
     const base = fname.replace(/\.[^.]*$/, '').toLowerCase();
-    const dest = Object.keys(env).find(k => k.toLowerCase() === base);
-    if (!dest) throw new Error('Add-Content の書き込み先が見つかりません: ' + fname);
+    let dest = Object.keys(env).find(k => k.toLowerCase() === base);
+    if (!dest){ env[base] = []; dest = base; }
     for (const it of items) env[dest].push(String(it));
     return [];
   }
@@ -663,6 +673,8 @@ function dispatch(name, positional, params, block, input, env, ctx, piped){
       svc.Status = 'Running';
       return [];
     }
+    const ioS = params['-inputobject'];
+    if (ioS && typeof ioS === 'object' && 'Status' in ioS){ ioS.Status = 'Running'; return []; }
     if (!piped) throw new Error('起動するサービスを指定してください（-Name か、パイプで渡してください）');
     for (const it of items) if (it && typeof it === 'object' && 'Status' in it) it.Status = 'Running';
     return [];
@@ -676,6 +688,8 @@ function dispatch(name, positional, params, block, input, env, ctx, piped){
         if (env.Processes[i].Name.toLowerCase() === String(targetName).toLowerCase()) env.Processes.splice(i, 1);
       return [];
     }
+    const ioP = params['-inputobject'];
+    if (ioP && typeof ioP === 'object'){ const ix = env.Processes.indexOf(ioP); if (ix >= 0) env.Processes.splice(ix, 1); return []; }
     if (!piped) throw new Error('止めるプロセスを指定してください（パイプか -Name で指定してください）');
     for (const it of items){
       const i = env.Processes.indexOf(it);
@@ -790,6 +804,15 @@ function dispatch(name, positional, params, block, input, env, ctx, piped){
     if (targetName !== undefined){
       const u = env.Users.find(x => x.Name.toLowerCase() === String(targetName).toLowerCase());
       if (!u) throw new Error('ユーザーが見つかりません: ' + targetName);
+      u.Enabled = to;
+      return [];
+    }
+    const ioU = params['-inputobject'];
+    if (ioU && typeof ioU === 'object' && 'Enabled' in ioU){ ioU.Enabled = to; return []; }
+    const sidT = params['-sid'];
+    if (sidT !== undefined){
+      const u = env.Users.find(x => x.SID === String(sidT));
+      if (!u) throw new Error('ユーザーが見つかりません: ' + sidT);
       u.Enabled = to;
       return [];
     }
@@ -923,6 +946,21 @@ function unwrapVal(v){ return (v && typeof v === 'object' && '__date' in v) ? v.
 function compareVals(l, op, r){
   if (op === '-like') return likeMatch(l, r);
   l = unwrapVal(l); r = unwrapVal(r);
+  if (l == null || r == null){
+    const bothNull = (l == null && r == null);
+    if (op === '-eq') return bothNull;
+    if (op === '-ne') return !bothNull;
+    if (l == null && r != null) return op === '-lt' || op === '-le';
+    if (r == null && l != null) return op === '-gt' || op === '-ge';
+    return false;
+  }
+  if (typeof l === 'boolean' && typeof r === 'string') r = (r !== '');
+  if (typeof r === 'boolean' && typeof l === 'string') l = (l !== '');
+  if (typeof l === 'boolean' && typeof r === 'boolean'){
+    const a = l ? 1 : 0, b = r ? 1 : 0;
+    switch (op){ case '-eq': return a === b; case '-ne': return a !== b; case '-gt': return a > b; case '-ge': return a >= b; case '-lt': return a < b; case '-le': return a <= b; }
+    return false;
+  }
   if (typeof l === 'number' && typeof r === 'number'){
     switch (op){ case '-gt': return l > r; case '-ge': return l >= r; case '-lt': return l < r; case '-le': return l <= r; case '-eq': return l === r; case '-ne': return l !== r; }
   }
@@ -960,7 +998,7 @@ function simulate(quest, env, ctx){
     const drv = (env.Drives || []).find(x => x.Name === d.Name);
     if (drv){ drv.Free += d.dFreeGB * GB; drv.Used -= d.dFreeGB * GB; }
   }
-  if (sim.ageUsers) for (const u of env.Users || []) u.LastLogon.__date -= sim.ageUsers;
+  if (sim.ageUsers) for (const u of env.Users || []) if (u.LastLogon && u.LastLogon.__date <= -15) u.LastLogon.__date -= sim.ageUsers;
   if (ctx.autoRun && ctx.autoRun.block) runStatements(new Cur(ctx.autoRun.block), env, ctx, null);
   else if (ctx.autoRun) invokeFunction(ctx, env, ctx.autoRun.func, [], ctx.autoRun.named);
 }
@@ -1190,7 +1228,7 @@ function processHtml(env){
 }
 function usersHtml(env){
   return '<div class="folder">👤 ローカルユーザー</div><table>' + env.Users.map(u =>
-    `<tr><td class="n">${u.Name}</td><td class="r">${u.Enabled ? '🟢 有効' : '🔴 無効'}</td><td class="r">最終ログイン ${fmtDate(u.LastLogon)}</td></tr>`).join('') + '</table>';
+    `<tr><td class="n">${u.Name}</td><td class="r">${u.Enabled ? '🟢 有効' : '🔴 無効'}</td><td class="r">${u.Description}</td></tr>`).join('') + '</table>';
 }
 function openQuest(q){
   currentQuest = q;
@@ -1297,7 +1335,7 @@ function formatOutput(output){
     if (it && typeof it === 'object' && 'Used' in it) return `${it.Name} ドライブ　使用 ${fmtGB(it.Used)}　空き ${fmtGB(it.Free)}`;
     if (it && typeof it === 'object' && 'WS' in it) return `${it.Name}　メモリ ${fmtMB(it.WS)}　CPU ${it.CPU}`;
     if (it && typeof it === 'object' && 'Status' in it) return `${it.Name}　${it.Status}`;
-    if (it && typeof it === 'object' && 'Enabled' in it) return `${it.Name}　${it.Enabled ? '有効' : '無効'}　最終ログイン ${fmtDate(it.LastLogon)}`;
+    if (it && typeof it === 'object' && 'Enabled' in it) return `${it.Name}　${it.Enabled ? 'True' : 'False'}　${it.Description || ''}`;
     if (it && typeof it === 'object' && 'Name' in it) return `${it.Name}　${fmtSize(it.Length)}　${fmtDate(it.LastWriteTime)}`;
     if (it && typeof it === 'object' && 'Message' in it) return `${it.Time}　${it.Level}　${it.Source}　${it.Message}`;
     return String(it);
