@@ -212,11 +212,24 @@ function baseLines(){ return [
 function makeLogEnv(){
   return { Log: baseLines(), Alerts: [] };
 }
+/* ---- theme: disk ---- */
+const GB = 1024 * 1024 * 1024;
+function baseDrives(){ return [
+  {Name:'C', Used:180, Free:35},
+  {Name:'D', Used:700, Free:300},
+  {Name:'E', Used:95,  Free:5},
+  {Name:'F', Used:450, Free:8},
+  {Name:'G', Used:120, Free:12},
+  {Name:'H', Used:980, Free:20}
+];}
+function makeDiskEnv(){
+  return { Drives: baseDrives().map(d => ({ Name:d.Name, Used:d.Used * GB, Free:d.Free * GB })), Report: [] };
+}
 function fmtSize(bytes){ const kb = bytes / 1024; return (Math.round(kb * 10) / 10) + ' KB'; }
 const THEMES = [
   {id:'files',   name:'ファイル整理',           icon:'assets/obj-folder.png',  bg:'assets/bg-files.jpg',   ready:true},
   {id:'log',     name:'ログ調査',               icon:'assets/obj-log.png',     bg:'assets/bg-log.jpg',     ready:true},
-  {id:'disk',    name:'ディスク棚卸し',         icon:'assets/obj-disk.png',    bg:'assets/bg-disk.jpg',    ready:false},
+  {id:'disk',    name:'ディスク棚卸し',         icon:'assets/obj-disk.png',    bg:'assets/bg-disk.jpg',    ready:true},
   {id:'process', name:'プロセス・サービス監視', icon:'assets/obj-gear.png',    bg:'assets/bg-process.jpg', ready:false},
   {id:'users',   name:'ユーザーアカウント管理', icon:'assets/obj-idbadge.png', bg:'assets/bg-users.jpg',   ready:false},
   {id:'backup',  name:'バックアップ運用',       icon:'assets/obj-tape.png',    bg:'assets/bg-backup.jpg',  ready:false},
@@ -275,13 +288,38 @@ const QUESTS = [
     request:'「段階4の関数はログ全部を写す作りだ。このまま毎時実行すると、過去のエラーまで毎回重複して写ってしまう。そこで今回は、新しい1時間分（12時台）の 決済 のエラーだけを alerts.log に写すブロックを、ゲーム内コマンド Register-AutoRun に { } で囲んで登録してくれ。登録したら『1時間進める』で次の1時間へ進め、自動で写されるか確かめよう」',
     solution:"Register-AutoRun { Get-Content server.log | Where-Object { $_ -like '12:* ERROR 決済 *' } | Add-Content alerts.log }", judge:'state',
     preload:'function Copy-ErrorLog($Source) { Get-Content server.log | Where-Object { $_ -like "* ERROR $Source *" } | Add-Content alerts.log }',
-    sim:{ label:'1時間進める（自動実行）', pastText:'1時間が経ちました', destName:'Alerts', home:'Log', failHint:'alerts.log の中身が期待と違います。全部を写すと過去の分が重複します（12時台の分だけが対象です）', arrivals:[
+    sim:{ label:'1時間進める（自動実行）', pastText:'1時間が経ちました', destName:'Alerts', home:'Log', verb:'に追加', failHint:'alerts.log の中身が期待と違います。全部を写すと過去の分が重複します（12時台の分だけが対象です）', arrivals:[
       '12:03 ERROR 決済 timeout: 決済ゲートウェイ応答なし',
       '12:07 INFO Web 定期ヘルスチェックOK',
       '12:12 ERROR 決済 決済キュー障害: 処理が停止',
       '12:20 WARN アプリ メモリ使用率88%'
     ]},
-    chips:['Register-AutoRun','{','Get-Content','server.log','|','Where-Object',"$_ -like '12:* ERROR 決済 *'",'Add-Content','alerts.log','}'] }
+    chips:['Register-AutoRun','{','Get-Content','server.log','|','Where-Object',"$_ -like '12:* ERROR 決済 *'",'Add-Content','alerts.log','}'] },
+  { id:'disk-1', theme:'disk', stage:1, title:'ドライブを全部見る',
+    request:'「来週の棚卸しに使うから、このPCのドライブを全部見せてくれ」',
+    solution:'Get-PSDrive', judge:'output',
+    chips:['Get-PSDrive'] },
+  { id:'disk-2', theme:'disk', stage:2, title:'空きが少ないドライブ',
+    request:'「空き容量が10GB未満のドライブだけ抜き出してくれ」',
+    solution:'Get-PSDrive | Where-Object { $_.Free -lt 10GB }', judge:'output',
+    chips:['Get-PSDrive','|','Where-Object','{','}','$_.Free -lt 10GB'] },
+  { id:'disk-3', theme:'disk', stage:3, title:'要注意ドライブを書き出す',
+    request:'「空きが15GB未満のドライブは、名前を report.log に書き出してくれ。1台ずつ調べて、条件に合うものだけだ」',
+    solution:'Get-PSDrive | ForEach-Object { if ($_.Free -lt 15GB) { $_.Name } } | Add-Content report.log', judge:'state',
+    chips:['Get-PSDrive','|','ForEach-Object','{','}','if','($_.Free -lt 15GB)','$_.Name','Add-Content','report.log'] },
+  { id:'disk-4', theme:'disk', stage:4, title:'空きチェックを関数にする',
+    request:'「この空きチェックを、使い回せる関数にしてくれ。名前は Check-DiskSpace、引数 $Limit で『空きがこれ未満なら対象』という境界を受け取って、対象ドライブの名前を report.log に書き出す動きで。作ったら 10GB で実行してくれ」',
+    solution:'function Check-DiskSpace($Limit) { Get-PSDrive | Where-Object { $_.Free -lt $Limit } | ForEach-Object { $_.Name } | Add-Content report.log }\nCheck-DiskSpace 10GB',
+    judge:'state', requireFunction:'Check-DiskSpace', hiddenTest:{ calls:['Check-DiskSpace -Limit 15GB'], param:'$Limit' },
+    chips:['function','Check-DiskSpace','($Limit)','{','}','Get-PSDrive','|','Where-Object','$_.Free -lt $Limit','ForEach-Object','$_.Name','Add-Content','report.log','10GB'] },
+  { id:'disk-5', theme:'disk', stage:5, title:'空きチェックを自動化する',
+    request:'「段階4で作った関数 Check-DiskSpace を、毎月の自動実行に登録しよう。ゲーム内コマンド Register-AutoRun に、実行したいコマンドを { } で囲んで渡してくれ。境界は 10GB で。登録したら『1か月進める』で次の月へ進め、空きが減ったドライブも自動で書き出されるか確かめよう」',
+    solution:'Register-AutoRun { Check-DiskSpace -Limit 10GB }', judge:'state',
+    preload:'function Check-DiskSpace($Limit) { Get-PSDrive | Where-Object { $_.Free -lt $Limit } | ForEach-Object { $_.Name } | Add-Content report.log }',
+    sim:{ label:'1か月進める（自動実行）', pastText:'1か月が経ちました', destName:'Report', verb:'に追加', failHint:'report.log の中身が期待と違います。1か月で空きが減ったドライブも対象に入ります', diskDeltas:[
+      {Name:'C', dFreeGB:-7}, {Name:'D', dFreeGB:-10}, {Name:'G', dFreeGB:-6}, {Name:'H', dFreeGB:-11}
+    ]},
+    chips:['Register-AutoRun','{','Check-DiskSpace -Limit 10GB','}'] }
 ];
 
 /* ================= interpreter ================= */
@@ -364,6 +402,13 @@ function runStatements(cur, env, ctx, input){
     if (tk.t === '}') break;
     if (tk.t === 'word' && tk.v.toLowerCase() === 'function'){ parseFunctionDef(cur, ctx); value = []; continue; }
     if (tk.t === 'word' && tk.v.toLowerCase() === 'if'){ value = parseIf(cur, env, ctx, value); continue; }
+    if (tk.t === 'var' || tk.t === 'num' || tk.t === 'str' || tk.t === '('){
+      value = parseOr(cur, ctx);
+      ctx.output = Array.isArray(value) ? value : [value];
+      const nx2 = cur.peek();
+      if (nx2 && nx2.t !== 'sep' && nx2.t !== '}') throw new Error('文の区切りが分かりません');
+      continue;
+    }
     value = parsePipeline(cur, env, ctx, value);
     ctx.output = value;
     const nx = cur.peek();
@@ -379,9 +424,9 @@ function parseIf(cur, env, ctx, input){
   let elseToks = null;
   const nx = cur.peek();
   if (nx && nx.t === 'word' && nx.v.toLowerCase() === 'else'){ cur.next(); elseToks = captureBlock(cur); }
-  if (cond) runStatements(new Cur(thenToks), env, ctx, input);
-  else if (elseToks) runStatements(new Cur(elseToks), env, ctx, input);
-  return input;
+  if (cond) return runStatements(new Cur(thenToks), env, ctx, input);
+  if (elseToks) return runStatements(new Cur(elseToks), env, ctx, input);
+  return [];
 }
 function parseFunctionDef(cur, ctx){
   cur.next(); // 'function'
@@ -475,10 +520,15 @@ function dispatch(name, positional, params, block, input, env, ctx){
   }
   if (lower === 'add-content'){
     const fname = String(positional[0] || '');
-    const dest = Object.keys(env).find(k => k.toLowerCase() === fname.toLowerCase() || (k + '.log').toLowerCase() === fname.toLowerCase());
+    const base = fname.replace(/\.[^.]*$/, '').toLowerCase();
+    const dest = Object.keys(env).find(k => k.toLowerCase() === base);
     if (!dest) throw new Error('Add-Content の書き込み先が見つかりません: ' + fname);
     for (const it of items) env[dest].push(String(it));
     return [];
+  }
+  if (lower === 'get-psdrive' || lower === 'gdr'){
+    if (!env.Drives) throw new Error('このテーマでは Get-PSDrive は使えません');
+    return env.Drives.slice();
   }
   if (lower === 'get-childitem' || lower === 'gci' || lower === 'dir' || lower === 'ls'){
     let path = (positional[0] !== undefined ? positional[0] : (params['-path'] !== undefined ? params['-path'] : 'Downloads'));
@@ -515,6 +565,7 @@ function dispatch(name, positional, params, block, input, env, ctx){
       const v = runStatements(new Cur(block), env, ctx, [it]);
       ctx.currentItem = saved;
       if (Array.isArray(v)) out.push(...v);
+      else if (v !== undefined && v !== null) out.push(v);
     }
     return out;
   }
@@ -697,6 +748,7 @@ function itemName(x){
 }
 function themeMakeEnv(theme){
   if (theme === 'log') return makeLogEnv();
+  if (theme === 'disk') return makeDiskEnv();
   return makeEnv();
 }
 function themeToItem(theme, raw){
@@ -708,6 +760,10 @@ function simulate(quest, env, ctx){
   if (sim.ageFiles) for (const f of FOLDERS) for (const file of env[f]) file.LastWriteTime.__date -= sim.days;
   const home = sim.home || 'Downloads';
   for (const a of sim.arrivals || []) env[home].push(themeToItem(quest.theme, a));
+  for (const d of sim.diskDeltas || []){
+    const drv = (env.Drives || []).find(x => x.Name === d.Name);
+    if (drv){ drv.Free += d.dFreeGB * GB; drv.Used -= d.dFreeGB * GB; }
+  }
   if (ctx.autoRun && ctx.autoRun.block) runStatements(new Cur(ctx.autoRun.block), env, ctx, null);
   else if (ctx.autoRun) invokeFunction(ctx, env, ctx.autoRun.func, [], ctx.autoRun.named);
 }
@@ -894,6 +950,7 @@ document.querySelectorAll('[data-back]').forEach(b => b.addEventListener('click'
 
 function envHtml(env){
   if (env.Log) return logHtml(env);
+  if (env.Drives) return diskHtml(env);
   let h = '';
   for (const f of FOLDERS){
     h += `<div class="folder">📁 ${f}</div>`;
@@ -909,6 +966,15 @@ function logHtml(env){
   const lines = arr => '<div class="loglines">' + arr.map(x => String(x).replace(/</g, '&lt;')).join('\n') + '</div>';
   let h = '<div class="folder">📄 server.log</div>' + (env.Log.length ? lines(env.Log) : '<div class="empty">（空です）</div>');
   h += '<div class="folder">📄 alerts.log</div>' + (env.Alerts.length ? lines(env.Alerts) : '<div class="empty">（空です）</div>');
+  return h;
+}
+function fmtGB(bytes){ const v = bytes / (1024 * 1024 * 1024); return (Math.round(v * 10) / 10) + ' GB'; }
+function diskHtml(env){
+  let h = '<div class="folder">💽 ドライブ</div><table>' + env.Drives.map(d =>
+    `<tr><td class="n">${d.Name} ドライブ</td><td class="r">使用 ${fmtGB(d.Used)}</td><td class="r">空き ${fmtGB(d.Free)}</td></tr>`).join('') + '</table>';
+  h += '<div class="folder">📄 report.log</div>' + (env.Report.length
+    ? '<div class="loglines">' + env.Report.map(x => String(x).replace(/</g, '&lt;')).join('\n') + '</div>'
+    : '<div class="empty">（空です）</div>');
   return h;
 }
 function openQuest(q){
@@ -1013,6 +1079,7 @@ function formatOutput(output){
   if (!output || !output.length) return '<span class="dim">（出力なし）</span>';
   return output.map(it => {
     if (it && typeof it === 'object' && '_count' in it) return 'Count : ' + it._count;
+    if (it && typeof it === 'object' && 'Used' in it) return `${it.Name} ドライブ　使用 ${fmtGB(it.Used)}　空き ${fmtGB(it.Free)}`;
     if (it && typeof it === 'object' && 'Name' in it) return `${it.Name}　${fmtSize(it.Length)}　${fmtDate(it.LastWriteTime)}`;
     if (it && typeof it === 'object' && 'Message' in it) return `${it.Time}　${it.Level}　${it.Source}　${it.Message}`;
     return String(it);
@@ -1110,7 +1177,7 @@ $('btn-advance').addEventListener('click', () => {
     const after = stateSnapshot(env);
     const dest = q.sim.destName;
     const moved = (after[dest] || []).filter(n => !(before[dest] || []).includes(n));
-    const verb = q.theme === 'log' ? 'に追加' : 'へ移動';
+    const verb = q.sim.verb || 'へ移動';
     $('out-panel').classList.remove('hidden');
     $('out-text').innerHTML = '— ' + q.sim.pastText + ' —\n' +
       (moved.length ? '自動実行で ' + dest + ' ' + verb + '：\n' + moved.join('\n') : '自動実行で変化したものはありません');
