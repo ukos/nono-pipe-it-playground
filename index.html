@@ -291,6 +291,18 @@ function makeBackupEnv(){
   for (const raw of baseBackupSet()) env[raw.Folder].push(toBackupFile(raw));
   return env;
 }
+/* ---- theme: network ---- */
+function baseHosts(){ return [
+  {Name:'vpn-gateway', IPAddress:'192.168.1.1',  Reachable:true,  Latency:3,  Ports:{}},
+  {Name:'web-server',  IPAddress:'192.168.1.10', Reachable:true,  Latency:12, Ports:{80:true, 443:true}},
+  {Name:'db-server',   IPAddress:'192.168.1.20', Reachable:true,  Latency:25, Ports:{1433:true}},
+  {Name:'file-server', IPAddress:'192.168.1.30', Reachable:false, Latency:null, Ports:{}},
+  {Name:'mail-server', IPAddress:'192.168.1.40', Reachable:true,  Latency:40, Ports:{587:true}},
+  {Name:'printer',     IPAddress:'192.168.1.50', Reachable:true,  Latency:8,  Ports:{9100:true}}
+];}
+function makeNetworkEnv(){
+  return { targets: baseHosts().map(h => h.Name), Hosts: baseHosts().map(h => ({ ...h, Ports: { ...h.Ports } })) };
+}
 function fmtSize(bytes){ const kb = bytes / 1024; return (Math.round(kb * 10) / 10) + ' KB'; }
 const THEMES = [
   {id:'files',   name:'ファイル整理',           icon:'assets/obj-folder.png',  bg:'assets/bg-files.jpg',   ready:true},
@@ -299,7 +311,7 @@ const THEMES = [
   {id:'process', name:'プロセス・サービス監視', icon:'assets/obj-gear.png',    bg:'assets/bg-process.jpg', ready:true},
   {id:'users',   name:'ユーザーアカウント管理', icon:'assets/obj-idbadge.png', bg:'assets/bg-users.jpg',   ready:true},
   {id:'backup',  name:'バックアップ運用',       icon:'assets/obj-tape.png',    bg:'assets/bg-backup.jpg',  ready:true},
-  {id:'network', name:'ネットワーク疎通確認',   icon:'assets/obj-router.png',  bg:'assets/bg-network.jpg', ready:false},
+  {id:'network', name:'ネットワーク疎通確認',   icon:'assets/obj-router.png',  bg:'assets/bg-network.jpg', ready:true},
   {id:'software',name:'ソフトウェア棚卸し',     icon:'assets/obj-software.png',bg:'assets/bg-software.jpg',ready:false},
   {id:'events',  name:'イベントログ監視',       icon:'assets/obj-warning.png', bg:'assets/bg-events.jpg',  ready:false},
   {id:'report',  name:'定例レポート作成',       icon:'assets/obj-report.png',  bg:'assets/bg-report.jpg',  ready:false}
@@ -474,7 +486,33 @@ const QUESTS = [
       {Name:'写真_現場2.jpg', Folder:'Data', Length:2800, LastWriteTime:2}
     ]},
     clearMemo:'実務メモ： Register-AutoRun はゲーム内専用コマンドです。実務ではタスクスケジューラに Register-ScheduledTask で登録するか、robocopy を定期実行します。あと、バックアップは「取れているか」より「戻せるか」が本番です。定期的なリストア訓練まで含めて運用です。',
-    chips:['Register-AutoRun','{','Copy-ChangedFile -Days 7','}'] }
+    chips:['Register-AutoRun','{','Copy-ChangedFile -Days 7','}'] },
+  { id:'net-1', theme:'network', stage:1, title:'pingを打ってみる',
+    request:'「file-server の調子が悪いと連絡があった。まず ping が通るか見てくれ（Test-Connection というコマンドを使う）」',
+    solution:'Test-Connection file-server', judge:'output',
+    chips:['Test-Connection','file-server'] },
+  { id:'net-2', theme:'network', stage:2, title:'サービスのポートを確認する',
+    request:'「生きているサーバーで、サービスのポートが開いているか確認してくれ。Test-NetConnection で、web-server の 443、db-server の 1433、mail-server の 25 だ」',
+    solution:'Test-NetConnection -ComputerName web-server -Port 443\nTest-NetConnection -ComputerName db-server -Port 1433\nTest-NetConnection -ComputerName mail-server -Port 25', judge:'output',
+    chips:['Test-NetConnection','-ComputerName','web-server','db-server','mail-server','-Port','443','1433','25'] },
+  { id:'net-3', theme:'network', stage:3, title:'落ちているサーバーを記録する',
+    request:'「対象リスト targets.txt にあるサーバー全部に ping して、通らなかったサーバーの名前を down-list.log に記録してくれ」',
+    solution:"Get-Content targets.txt | Test-Connection | Where-Object { $_.Status -ne 'Success' } | ForEach-Object { $_.Address } | Add-Content down-list.log", judge:'state',
+    chips:['Get-Content','targets.txt','|','Test-Connection','Where-Object','{','}',"$_.Status -ne 'Success'",'ForEach-Object','$_.Address','Add-Content','down-list.log'] },
+  { id:'net-4', theme:'network', stage:4, title:'死活チェックを関数にする',
+    request:'「この『落ちているサーバーを記録する』処理を、使い回せる関数にしてくれ。名前は Save-DownServer、引数 $ListFile で記録先のファイル名を受け取る動きで。作ったら down-list.log で実行してくれ」',
+    solution:"function Save-DownServer($ListFile) { Get-Content targets.txt | Test-Connection | Where-Object { $_.Status -ne 'Success' } | ForEach-Object { $_.Address } | Add-Content $ListFile }\nSave-DownServer down-list.log",
+    judge:'state', requireFunction:'Save-DownServer', hiddenTest:{ calls:['Save-DownServer -ListFile alert-list.log'], param:'$ListFile' },
+    chips:['function','Save-DownServer','($ListFile)','{','}','Get-Content','targets.txt','|','Test-Connection','Where-Object',"$_.Status -ne 'Success'",'ForEach-Object','$_.Address','Add-Content','$ListFile','down-list.log'] },
+  { id:'net-5', theme:'network', stage:5, title:'死活監視を自動化する',
+    request:'「段階4で作った関数 Save-DownServer を、毎時の自動実行に登録しよう。ゲーム内コマンド Register-AutoRun に、実行したいコマンドを { } で囲んで渡してくれ。記録先は down-list.log で。登録したら『1時間進める』で次の監視タイミングへ進め、状態が変わったサーバーが記録されるか確かめよう」',
+    solution:'Register-AutoRun { Save-DownServer down-list.log }', judge:'state',
+    preload:"function Save-DownServer($ListFile) { Get-Content targets.txt | Test-Connection | Where-Object { $_.Status -ne 'Success' } | ForEach-Object { $_.Address } | Add-Content $ListFile }",
+    sim:{ label:'1時間進める（自動実行）', pastText:'1時間が経ちました', destName:'down-list', home:'targets', failHint:'記録されたサーバーが期待と違います。1時間の間に、落ちるサーバーも新しく監視対象になるサーバーもあります', arrivals:['chat-server'],
+      newHosts:[{Name:'chat-server', IPAddress:'192.168.1.60', Reachable:true, Latency:15, Ports:{5222:true}}],
+      hostDeltas:[{Name:'mail-server', Reachable:false}] },
+    clearMemo:'実務メモ： Register-AutoRun はゲーム内専用コマンドです。実務ではタスクスケジューラに Register-ScheduledTask でスクリプトを登録するか、Zabbix などの監視ツールを使います。あと、ping（ICMP）がファイアウォールで塞がれていると、サービスが生きていても疎通なしに見えます。Test-NetConnection のポート確認と合わせて判断するのが実務です。',
+    chips:['Register-AutoRun','{','Save-DownServer down-list.log','}'] }
 ];
 
 /* ================= interpreter ================= */
@@ -561,7 +599,7 @@ function runStatements(cur, env, ctx, input){
     if (tk.t === 'var' && cur.toks[cur.i + 1] && cur.toks[cur.i + 1].t === '='){
       cur.next(); cur.next();
       ctx.vars[tk.v] = parseOr(cur, ctx);
-      value = []; ctx.output = [];
+      value = [];
       continue;
     }
     if (tk.t === 'var' || tk.t === 'num' || tk.t === 'str' || tk.t === '('){
@@ -574,16 +612,16 @@ function runStatements(cur, env, ctx, input){
         const nx2 = cur.peek();
         if (nx2 && nx2.t !== 'sep' && nx2.t !== '}') throw new Error('文の区切りが分かりません');
       }
-      ctx.output = Array.isArray(value) ? value : [value];
+      ctx.output.push(...(Array.isArray(value) ? value : [value]));
       continue;
     }
     if (tk.t === 'word' && tk.v.toLowerCase() === 'foreach' && cur.toks[cur.i + 1] && cur.toks[cur.i + 1].t === '('){
       value = parseForeachStmt(cur, env, ctx);
-      ctx.output = Array.isArray(value) ? value : [value];
+      ctx.output.push(...(Array.isArray(value) ? value : [value]));
       continue;
     }
     value = parsePipeline(cur, env, ctx, null);
-    ctx.output = value;
+    ctx.output.push(...(Array.isArray(value) ? value : [value]));
     const nx = cur.peek();
     if (nx && nx.t !== 'sep' && nx.t !== '}') throw new Error('文の区切りが分かりません');
   }
@@ -691,8 +729,12 @@ function dispatch(name, positional, params, block, input, env, ctx, piped){
   const lower = name.toLowerCase();
   const items = Array.isArray(input) ? input : (input == null ? [] : [input]);
   if (lower === 'get-content' || lower === 'gc' || lower === 'cat' || lower === 'type'){
-    if (!env.Log) throw new Error('このテーマでは Get-Content は使えません');
-    let out = env.Log.slice();
+    const fname = String(positional[0] !== undefined ? positional[0] : (params['-path'] !== undefined ? params['-path'] : ''));
+    const base = fname.replace(/\.[^.]*$/, '').toLowerCase();
+    let srcKey = base ? Object.keys(env).find(k => k.toLowerCase() === base) : null;
+    if (!srcKey && env.Log) srcKey = 'Log';
+    if (!srcKey) throw new Error('このテーマでは Get-Content は使えません');
+    let out = env[srcKey].slice();
     if (params['-tail'] !== undefined) out = out.slice(-Number(params['-tail']));
     return out;
   }
@@ -892,11 +934,39 @@ function dispatch(name, positional, params, block, input, env, ctx, piped){
     }
     return [];
   }
+  if (lower === 'test-connection'){
+    if (!env.Hosts) throw new Error('このテーマでは Test-Connection は使えません');
+    let names = [];
+    if (piped) names = items.map(x => typeof x === 'string' ? x : (x && (x.Address || x.Name)));
+    else if (params['-computername'] !== undefined) names = [params['-computername']];
+    else if (positional[0] !== undefined) names = [positional[0]];
+    if (!names.length || names.some(n => n == null)) throw new Error('対象のサーバーを指定してください');
+    const results = names.map(n => {
+      const h = env.Hosts.find(x => x.Name.toLowerCase() === String(n).toLowerCase());
+      if (!h) throw new Error('名前が解決できません: ' + n);
+      return { Name:h.Name, Address:h.Name, IPAddress:h.IPAddress, Status: h.Reachable ? 'Success' : 'TimedOut', ResponseTime: h.Reachable ? h.Latency : null };
+    });
+    if (params['-quiet'] === true) return results.map(r => r.Status === 'Success');
+    return results;
+  }
+  if (lower === 'test-netconnection'){
+    if (!env.Hosts) throw new Error('このテーマでは Test-NetConnection は使えません');
+    const cname = params['-computername'] !== undefined ? params['-computername'] : positional[0];
+    if (cname === undefined) throw new Error('対象のサーバーを指定してください（-ComputerName）');
+    const h = env.Hosts.find(x => x.Name.toLowerCase() === String(cname).toLowerCase());
+    if (!h) throw new Error('名前が解決できません: ' + cname);
+    const res = { Name:h.Name, ComputerName:h.Name, RemoteAddress:h.IPAddress, PingSucceeded: h.Reachable };
+    if (params['-port'] !== undefined){
+      res.RemotePort = Number(params['-port']);
+      res.TcpTestSucceeded = !!(h.Reachable && h.Ports && h.Ports[res.RemotePort]);
+    }
+    return [res];
+  }
   if (lower === 'register-autorun'){
     if (block){ ctx.autoRun = { block }; return []; }
     const func = positional[0];
     if (!func) throw new Error('Register-AutoRun には { 実行するコマンド } が必要です');
-    ctx.autoRun = { func, named: params };
+    ctx.autoRun = { func, args: positional.slice(1), named: params };
     return [];
   }
   const fnKey = Object.keys(ctx.functions).find(k => k.toLowerCase() === lower);
@@ -1054,6 +1124,7 @@ function themeMakeEnv(theme){
   if (theme === 'process') return makeProcessEnv();
   if (theme === 'users') return makeUsersEnv();
   if (theme === 'backup') return makeBackupEnv();
+  if (theme === 'network') return makeNetworkEnv();
   return makeEnv();
 }
 function themeToItem(theme, raw){
@@ -1061,6 +1132,7 @@ function themeToItem(theme, raw){
   if (theme === 'process') return toProcess(raw);
   if (theme === 'users') return toUser(raw);
   if (theme === 'backup') return toBackupFile(raw);
+  if (theme === 'network') return raw;
   return toFile(raw);
 }
 function simulate(quest, env, ctx){
@@ -1077,24 +1149,30 @@ function simulate(quest, env, ctx){
     if (drv){ drv.Free += d.dFreeGB * GB; drv.Used -= d.dFreeGB * GB; }
   }
   if (sim.ageUsers) for (const u of env.Users || []) if (u.LastLogon && u.LastLogon.__date <= -15) u.LastLogon.__date -= sim.ageUsers;
+  for (const d of sim.hostDeltas || []){ const h = (env.Hosts || []).find(x => x.Name === d.Name); if (h) for (const k of Object.keys(d)) if (k !== 'Name') h[k] = d[k]; }
+  for (const nh of sim.newHosts || []) (env.Hosts || []).push({ ...nh, Ports: { ...(nh.Ports || {}) } });
   if (ctx.autoRun && ctx.autoRun.block) runStatements(new Cur(ctx.autoRun.block), env, ctx, null);
-  else if (ctx.autoRun) invokeFunction(ctx, env, ctx.autoRun.func, [], ctx.autoRun.named);
+  else if (ctx.autoRun) invokeFunction(ctx, env, ctx.autoRun.func, ctx.autoRun.args || [], ctx.autoRun.named);
+}
+function sigOf(it){
+  if (it && typeof it === 'object'){
+    if ('TcpTestSucceeded' in it) return itemName(it) + ':' + it.RemotePort + ':' + it.TcpTestSucceeded;
+    if ('Status' in it) return itemName(it) + ':' + it.Status;
+    if ('Enabled' in it) return itemName(it) + ':' + it.Enabled;
+    if ('Length' in it) return itemName(it) + ':' + it.Length;
+    return itemName(it);
+  }
+  return String(it);
 }
 function stateSnapshot(env){
   const o = {};
-  for (const f of Object.keys(env)) o[f] = env[f].map(it => {
-    if (it && typeof it === 'object' && 'Status' in it) return itemName(it) + ':' + it.Status;
-    if (it && typeof it === 'object' && 'Enabled' in it) return itemName(it) + ':' + it.Enabled;
-    if (it && typeof it === 'object' && 'Length' in it) return itemName(it) + ':' + it.Length;
-    return itemName(it);
-  }).slice().sort();
+  for (const f of Object.keys(env)) o[f] = env[f].map(sigOf).slice().sort();
   return o;
 }
 function outputSignature(output){
   return (output || []).map(it => {
     if (it && typeof it === 'object' && '_count' in it) return 'Count=' + it._count;
-    if (it && typeof it === 'object') return itemName(it);
-    return String(it);
+    return sigOf(it);
   });
 }
 function loadDefs(src, env, ctx){
@@ -1271,6 +1349,7 @@ function envHtml(env){
   if (env.Drives) return diskHtml(env);
   if (env.Processes) return processHtml(env);
   if (env.Users) return usersHtml(env);
+  if (env.Hosts) return hostsHtml(env);
   let h = '';
   for (const f of Object.keys(env)){
     h += `<div class="folder">📁 ${f}</div>`;
@@ -1308,6 +1387,13 @@ function processHtml(env){
 function usersHtml(env){
   return '<div class="folder">👤 ローカルユーザー</div><table>' + env.Users.map(u =>
     `<tr><td class="n">${u.Name}</td><td class="r">${u.Enabled ? '🟢 有効' : '🔴 無効'}</td><td class="r">${u.Description}</td></tr>`).join('') + '</table>';
+}
+function hostsHtml(env){
+  let h = '<div class="folder">📋 targets.txt（監視対象リスト）</div><table>' + env.targets.map(t =>
+    `<tr><td class="n">${t}</td></tr>`).join('') + '</table>';
+  h += '<div class="folder">🖥️ サーバー一覧</div><table>' + env.Hosts.map(x =>
+    `<tr><td class="n">${x.Name}</td><td class="r">${x.IPAddress}</td></tr>`).join('') + '</table>';
+  return h;
 }
 function openQuest(q){
   currentQuest = q;
@@ -1413,6 +1499,9 @@ function formatOutput(output){
     if (it && typeof it === 'object' && '_count' in it) return 'Count : ' + it._count;
     if (it && typeof it === 'object' && 'Used' in it) return `${it.Name} ドライブ　使用 ${fmtGB(it.Used)}　空き ${fmtGB(it.Free)}`;
     if (it && typeof it === 'object' && 'WS' in it) return `${it.Name}　メモリ ${fmtMB(it.WS)}　CPU ${it.CPU}`;
+    if (it && typeof it === 'object' && 'TcpTestSucceeded' in it) return `${it.ComputerName}　ポート ${it.RemotePort}　${it.TcpTestSucceeded ? '接続OK' : '接続できません'}`;
+    if (it && typeof it === 'object' && 'PingSucceeded' in it) return `${it.ComputerName}　ping ${it.PingSucceeded ? 'Success' : 'TimedOut'}`;
+    if (it && typeof it === 'object' && 'Status' in it && 'IPAddress' in it) return `${it.Address}　${it.IPAddress}　${it.Status}${it.ResponseTime != null ? '　' + it.ResponseTime + 'ms' : ''}`;
     if (it && typeof it === 'object' && 'Status' in it) return `${it.Name}　${it.Status}`;
     if (it && typeof it === 'object' && 'Enabled' in it) return `${it.Name}　${it.Enabled ? 'True' : 'False'}　${it.Description || ''}`;
     if (it && typeof it === 'object' && 'Name' in it) return `${it.Name}　${fmtSize(it.Length)}　${fmtDate(it.LastWriteTime)}`;
