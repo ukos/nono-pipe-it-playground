@@ -102,7 +102,7 @@
     <img class="logo" src="assets/logo.jpg" alt="PIPE IT! — Script More, Work Less">
     <button class="bigbtn" id="btn-start">▶ はじめる</button>
     <div class="panel" style="text-align:left"><h3>自動化の進み具合</h3><div class="autobar"><i id="auto-fill" style="width:0%"></i></div><div class="autotext" id="auto-text"></div></div>
-    <p class="note">PowerShell のコマンドで日々の運用作業をこなすゲームです。（バージョン 0.14）最初は手打ち、覚えたらスクリプト化、そして自動化へ。<br>Microsoft、Windows、PowerShell は Microsoft グループの商標です。本アプリは非公式の学習ゲームで、Microsoft とは関係ありません。</p>
+    <p class="note">PowerShell のコマンドで日々の運用作業をこなすゲームです。（バージョン 0.15）最初は手打ち、覚えたらスクリプト化、そして自動化へ。<br>Microsoft、Windows、PowerShell は Microsoft グループの商標です。本アプリは非公式の学習ゲームで、Microsoft とは関係ありません。</p>
   </section>
 
   <!-- themes -->
@@ -356,6 +356,90 @@ function makeEventsEnv(){
 function makeReportEnv(){
   return { Drives: baseDrives().map(d => ({ Name:d.Name, Used:d.Used * GB, Free:d.Free * GB })), PSDrivesExtra: EXTRA_DRIVES.map(d => ({ ...d })), Events: baseEvents().map(toEvent) };
 }
+/* ---- themes 11-16 (v0.15) ---- */
+const KNOWN_COMMANDS = ['Add-Content','ConvertTo-Json','Copy-Item','Disable-LocalUser','Export-Csv','Get-ChildItem','Get-CimInstance','Get-Command','Get-Content','Get-Date','Get-ExecutionPolicy','Get-Help','Get-ItemProperty','Get-LocalUser','Get-Member','Get-PSDrive','Get-Process','Get-Service','Get-WinEvent','Import-Csv','Invoke-Command','Move-Item','Register-ScheduledTask','Remove-Item','Set-Content','Set-ExecutionPolicy','Start-Service','Stop-Process','Stop-Service','Test-Connection','Test-NetConnection'];
+const HELP_DB = {
+  'test-connection':'指定したコンピューターに ICMP エコー要求（ping）を送信し、応答があるかを調べます',
+  'get-winevent':'イベント ログとイベント ログ ファイルからイベントを取得します',
+  'get-process':'ローカル コンピューターで実行されているプロセスを取得します',
+  'get-member':'オブジェクトのプロパティとメソッド（メンバー）を表示します',
+  'get-command':'コンピューターにインストールされているすべてのコマンドを取得します',
+  'invoke-command':'ローカル コンピューターとリモート コンピューターでコマンドを実行します',
+  'export-csv':'オブジェクトを CSV 文字列に変換し、ファイルに保存します',
+  'get-ciminstance':'CIM サーバーから CIM インスタンスのクラスを取得します'
+};
+function csvCell(v){
+  if (v == null) return '';
+  if (typeof v === 'object' && '__date' in v) v = fmtDate(v);
+  const s = String(v);
+  return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+function csvOf(items){
+  if (!items.length) return [];
+  const props = Object.keys(items[0]).filter(k => k !== 'InstallDays');
+  return [props.join(',')].concat(items.map(it => props.map(k => csvCell(it[k])).join(',')));
+}
+function parseCsvLine(line){
+  const out = []; let cur = '', inQ = false;
+  for (let i = 0; i < line.length; i++){
+    const c = line[i];
+    if (inQ){
+      if (c === '"'){ if (line[i + 1] === '"'){ cur += '"'; i++; } else inQ = false; }
+      else cur += c;
+    } else if (c === '"') inQ = true;
+    else if (c === ','){ out.push(cur); cur = ''; }
+    else cur += c;
+  }
+  out.push(cur);
+  return out;
+}
+/* theme 11: errors (events + hosts + backup folders) */
+function makeErrorsEnv(){
+  const e = makeEventsEnv(), n = makeNetworkEnv(), b = makeBackupEnv();
+  return { Events: e.Events, Hosts: n.Hosts, targets: n.targets, Data: b.Data, Backup: b.Backup, StrictPing: ['yes'] };
+}
+/* theme 12: safety (files + processes + services + users) */
+function makeSafetyEnv(){
+  const f = makeEnv(), pr = makeProcessEnv(), u = makeUsersEnv();
+  return { Downloads: f.Downloads, Archive: f.Archive, Trash: f.Trash, Processes: pr.Processes, Services: pr.Services, Users: u.Users };
+}
+/* theme 13: research (users + processes + command list) */
+function makeResearchEnv(){
+  const u = makeUsersEnv(), pr = makeProcessEnv();
+  return { Users: u.Users, Processes: pr.Processes, Commands: KNOWN_COMMANDS.slice() };
+}
+/* theme 14: data (packages + a pre-made CSV of the same data) */
+function makeDataEnv(){
+  const pkgs = basePackages().map(toPackage);
+  return { Packages: pkgs, apps: csvOf(pkgs) };
+}
+/* theme 15: script (drives + execution policy + a pre-placed script) */
+function makeScriptEnv(){
+  return { Drives: baseDrives().map(d => ({ Name:d.Name, Used:d.Used * GB, Free:d.Free * GB })), PSDrivesExtra: EXTRA_DRIVES.map(d => ({ ...d })), Report: [], Policy: ['Restricted'],
+    'check-disk': ['Get-PSDrive -PSProvider FileSystem | Where-Object { $_.Free -lt 10GB } | ForEach-Object { $_.Name } | Add-Content report.log'] };
+}
+/* theme 16: remote (per-host processes / services / drives) */
+function baseRemoteHosts(){ return [
+  {Name:'web-server', IPAddress:'192.168.1.10', OS:{Caption:'Microsoft Windows Server 2022', Version:'10.0.20348'},
+   Processes:[{Name:'chrome', Id:2400, WS:1200, CPU:820.3}, {Name:'powershell', Id:4600, WS:90, CPU:12.4}, {Name:'w3wp', Id:3600, WS:700, CPU:210.0}],
+   Services:[{Name:'BackupService', Status:'Stopped', StartType:'Automatic'}, {Name:'Spooler', Status:'Running', StartType:'Automatic'}, {Name:'W3SVC', Status:'Running', StartType:'Automatic'}],
+   Drives:[{Name:'C', Used:180, Free:35}]},
+  {Name:'db-server', IPAddress:'192.168.1.20', OS:{Caption:'Microsoft Windows Server 2022', Version:'10.0.20348'},
+   Processes:[{Name:'sqlservr', Id:1200, WS:2400, CPU:1500.5}, {Name:'backup-agent', Id:3100, WS:640, CPU:120.0}],
+   Services:[{Name:'MSSQLSERVER', Status:'Running', StartType:'Automatic'}, {Name:'MonitorAgent', Status:'Stopped', StartType:'Automatic'}, {Name:'SQLAgent', Status:'Stopped', StartType:'Manual'}],
+   Drives:[{Name:'C', Used:300, Free:80}]},
+  {Name:'file-server', IPAddress:'192.168.1.30', OS:{Caption:'Microsoft Windows Server 2022', Version:'10.0.20348'},
+   Processes:[{Name:'explorer', Id:4100, WS:150, CPU:60.5}],
+   Services:[{Name:'BackupService', Status:'Running', StartType:'Automatic'}, {Name:'LanmanServer', Status:'Running', StartType:'Automatic'}],
+   Drives:[{Name:'C', Used:450, Free:8}]}
+];}
+function makeRemoteEnv(){
+  return { servers: ['web-server', 'db-server', 'file-server'],
+    RemoteHosts: baseRemoteHosts().map(h => ({ Name:h.Name, IPAddress:h.IPAddress, OS:{ ...h.OS },
+      Processes: h.Processes.map(x => ({ Name:x.Name, Id:x.Id, WS:x.WS * MB, CPU:x.CPU })),
+      Services: h.Services.map(x => ({ ...x })),
+      Drives: h.Drives.map(d => ({ Name:d.Name, Used:d.Used * GB, Free:d.Free * GB })) })) };
+}
 function fmtSize(bytes){ const kb = bytes / 1024; return (Math.round(kb * 10) / 10) + ' KB'; }
 const THEMES = [
   {id:'files',   name:'ファイル整理',           icon:'assets/obj-folder.png',  bg:'assets/bg-files.jpg',   ready:true},
@@ -367,7 +451,13 @@ const THEMES = [
   {id:'network', name:'ネットワーク疎通確認',   icon:'assets/obj-router.png',  bg:'assets/bg-network.jpg', ready:true},
   {id:'software',name:'ソフトウェア棚卸し',     icon:'assets/obj-software.png',bg:'assets/bg-software.jpg',ready:true},
   {id:'events',  name:'イベントログ監視',       icon:'assets/obj-warning.png', bg:'assets/bg-events.jpg',  ready:true},
-  {id:'report',  name:'定例レポート作成',       icon:'assets/obj-report.png',  bg:'assets/bg-report.jpg',  ready:true}
+  {id:'report',  name:'定例レポート作成',       icon:'assets/obj-report.png',  bg:'assets/bg-report.jpg',  ready:true},
+  {id:'errors',  name:'エラー処理',             icon:'assets/obj-warning.png', bg:'assets/bg-events.jpg',  ready:true},
+  {id:'safety',  name:'安全な実行',             icon:'assets/obj-gear.png',    bg:'assets/bg-process.jpg', ready:true},
+  {id:'research',name:'自分で調べる',           icon:'assets/obj-log.png',     bg:'assets/bg-log.jpg',     ready:true},
+  {id:'data',    name:'データの受け渡し',       icon:'assets/obj-software.png',bg:'assets/bg-software.jpg',ready:true},
+  {id:'script',  name:'スクリプトとして届ける', icon:'assets/obj-report.png',  bg:'assets/bg-report.jpg',  ready:true},
+  {id:'remote',  name:'リモート実行',           icon:'assets/obj-router.png',  bg:'assets/bg-network.jpg', ready:true}
 ];
 const STAGE_NAMES = ['単発コマンド','パイプライン','条件分岐・繰り返し','関数化・スクリプト化','自動実行'];
 const QUESTS = [
@@ -655,8 +745,185 @@ const QUESTS = [
       {TimeCreatedDays:0, Time:'09:31', Id:7034, Level:2, ProviderName:'Service Control Manager', Message:'Print Spooler サービスは予期せぬ原因により終了しました。このサービスの終了は 4 回目です。'},
       {TimeCreatedDays:0, Time:'07:44', Id:1014, Level:3, ProviderName:'DNS Client', Message:'名前 resolver.local の名前解決がタイムアウトしました'}
     ]},
-    clearMemo:'実務メモ： Register-AutoRun はゲーム内専用コマンドです。実務ではタスクスケジューラに Register-ScheduledTask で登録し、レポートはメールで送ったり共有フォルダに置いたりして届けます。実務では、スクリプトファイル（.ps1）に保存したものを登録するのが本当の形で、実行ポリシーで止められることもあります。文字コードにも注意： Windows PowerShell 5.1 では書き出しの既定の文字コードがコマンドごとに違い、混ぜると日本語が文字化けします。-Encoding utf8 に揃えるのが安全です（PowerShell 7 の既定は UTF-8）。これで全10テーマ・50問が揃いました。手で打つ→パイプでつなぐ→条件で絞る→関数にする→自動で回す。この流れが身につけば、日常の運用はかなり楽になります。',
-    chips:['Register-AutoRun','{','New-DailyReport daily-report.log','}'] }
+    clearMemo:'実務メモ： Register-AutoRun はゲーム内専用コマンドです。実務ではタスクスケジューラに Register-ScheduledTask で登録し、レポートはメールで送ったり共有フォルダに置いたりして届けます。実務では、スクリプトファイル（.ps1）に保存したものを登録するのが本当の形で、実行ポリシーで止められることもあります。文字コードにも注意： Windows PowerShell 5.1 では書き出しの既定の文字コードがコマンドごとに違い、混ぜると日本語が文字化けします。-Encoding utf8 に揃えるのが安全です（PowerShell 7 の既定は UTF-8）。ここまでが基本の10テーマです。手で打つ→パイプでつなぐ→条件で絞る→関数にする→自動で回す。この流れが身につけば、日常の運用はかなり楽になります。この先の追加テーマでは、エラー処理や安全な実行など、実務の守りを学びます。',
+    chips:['Register-AutoRun','{','New-DailyReport daily-report.log','}'] },
+  { id:'err-1', theme:'errors', stage:1, title:'該当なしでもエラーにしない',
+    request:'「イベントID 9999 のイベントがあるか調べてくれ。Get-WinEvent の -FilterHashtable で指定する形で頼む。ただ、1件も見つからないと Get-WinEvent はエラーを出す。無いならないで静かに終わるよう、-ErrorAction SilentlyContinue を付けてくれ」',
+    solution:"Get-WinEvent -FilterHashtable @{LogName='System'; Id=9999} -ErrorAction SilentlyContinue", judge:'output',
+    clearMemo:'実務メモ： -FilterHashtable で1件も一致しないと、Get-WinEvent は「指定された条件に一致するイベントがありません」というエラーを出します。自動実行のスクリプトでは、このエラーが毎回記録されて本当の障害が埋もれます。-ErrorAction SilentlyContinue は「エラーにせず、黙って続ける」指定です。',
+    chips:['Get-WinEvent','-FilterHashtable',"@{LogName='System'; Id=9999}",'-ErrorAction','SilentlyContinue'] },
+  { id:'err-2', theme:'errors', stage:2, title:'応答の有無だけを集める',
+    request:'「対象リスト targets.txt のサーバー全部について、ping の応答があったかどうかだけを集めてくれ。Test-Connection の -Quiet なら、応答の有無が真偽値で返り、応答のないサーバーでもエラーにならない。1台につき1回（-Count 1）で頼む」',
+    solution:'Get-Content targets.txt | Test-Connection -Count 1 -Quiet', judge:'output',
+    clearMemo:'実務メモ： -Quiet は「1回でも応答があれば $true、全部失敗なら $false」を返し、エラーも抑えます。結果オブジェクトを集める形だと、応答のないホストでエラーになって処理が止まることがあります（特に Windows PowerShell 5.1）。有無だけ知りたいときは -Quiet が安全です。',
+    chips:['Get-Content','targets.txt','|','Test-Connection','-Count','1','-Quiet'] },
+  { id:'err-3', theme:'errors', stage:3, title:'robocopy の成否を判定する',
+    request:'「robocopy で Data から Backup へ差分コピーを実行してくれ。そのあと、終了コード（$LASTEXITCODE）が 8 未満なら成功として、backup-status.log に『バックアップOK』と記録してくれ」',
+    solution:"robocopy Data Backup\nif ($LASTEXITCODE -lt 8) { Add-Content backup-status.log 'バックアップOK' }", judge:'state',
+    clearMemo:'実務メモ： robocopy の終了コードは 0〜7 が成功です（1 は「コピーした」という意味）。「0 でなければ失敗」と判定すると、コピーが成功した日まで失敗扱いになります。8 以上が本当の失敗です。外部コマンドの成否は $LASTEXITCODE で判定します。',
+    chips:['robocopy','Data','Backup','if ($LASTEXITCODE -lt 8)','{','}','Add-Content','backup-status.log',"'バックアップOK'"] },
+  { id:'err-4', theme:'errors', stage:4, title:'失敗しても止まらない関数にする',
+    request:'「イベントIDを指定して、発生時刻とメッセージを check.log に記録する関数を作ってくれ。名前は Save-EventSafe、引数 $Id でイベントIDを受け取る動きで。ただし、該当するイベントが無いときはエラーで止まらず、check.log に『該当なし』と記録すること（try と catch を使う）。作ったら 9999 で実行してくれ」',
+    solution:"function Save-EventSafe($Id) {\n  try { Get-WinEvent -FilterHashtable @{LogName='System'; Id=$Id} | ForEach-Object { \"$($_.TimeCreated) $($_.Message)\" } | Add-Content check.log } catch { Add-Content check.log '該当なし' }\n}\nSave-EventSafe 9999",
+    judge:'state', requireFunction:'Save-EventSafe', hiddenTest:{ calls:['Save-EventSafe -Id 7034'], param:'$Id' },
+    clearMemo:'実務メモ： try { } catch { } は「失敗したら、止まらずに後始末や記録をする」ための構文です。無人で動く自動実行ほど、エラーで止まる前提の作りは危険です。ただし catch で何でも黙って握りつぶすと障害に気づけません。「記録して続ける」が基本です。',
+    chips:['function','Save-EventSafe','($Id)','{','}','try','Get-WinEvent','-FilterHashtable',"@{LogName='System'; Id=$Id}",'|','ForEach-Object','"$($_.TimeCreated) $($_.Message)"','Add-Content','check.log','catch',"'該当なし'",'9999'] },
+  { id:'err-5', theme:'errors', stage:5, title:'毎朝のチェックを自動化する',
+    request:'「段階4で作った関数 Save-EventSafe を、毎朝の自動実行に登録しよう。ゲーム内コマンド Register-AutoRun に、実行したいコマンドを { } で囲んで渡してくれ。ID は 7034 で。登録したら『1日進める』で翌朝へ進め、新しいエラーが記録されるか確かめよう」',
+    solution:'Register-AutoRun { Save-EventSafe -Id 7034 }', judge:'state',
+    preload:"function Save-EventSafe($Id) { try { Get-WinEvent -FilterHashtable @{LogName='System'; Id=$Id} | ForEach-Object { \"$($_.TimeCreated) $($_.Message)\" } | Add-Content check.log } catch { Add-Content check.log '該当なし' } }",
+    sim:{ label:'1日進める（自動実行）', pastText:'翌朝になりました', destName:'check', home:'Events', failHint:'記録された内容が期待と違います。新しい 7034 が増えているはずです', ageEvents:1, arrivals:[
+      {TimeCreatedDays:0, Time:'10:47', Id:7034, Level:2, ProviderName:'Service Control Manager', Message:'Print Spooler サービスは予期せぬ原因により終了しました。このサービスの終了は 4 回目です。'}
+    ]},
+    clearMemo:'実務メモ： Register-AutoRun はゲーム内専用コマンドです。実務ではタスクスケジューラに Register-ScheduledTask で登録します。自動実行は誰も見ていないところで失敗します。だからこそ、エラーで止まらない作り（-ErrorAction、try/catch）と、失敗したことが分かる記録の両方が要ります。',
+    chips:['Register-AutoRun','{','Save-EventSafe -Id 7034','}'] },
+  { id:'safe-1', theme:'safety', stage:1, title:'止める前に下見する',
+    request:'「メモリ（WS）が 1GB より大きいプロセスを止めたい。でも、いきなり止めるのは危ない。まず -WhatIf を付けて、止めたら何が起きるかだけ見せてくれ（実際には止めない）」',
+    solution:'Get-Process | Where-Object { $_.WS -gt 1GB } | Stop-Process -WhatIf', judge:'output',
+    clearMemo:'実務メモ： -WhatIf を付けると、コマンドは実際には実行されず「何をするつもりか」だけを表示します。消す・止める・無効化する系のコマンドの安全確認の定番です。対応していないコマンドでは使えませんが、Remove-Item や Stop-Process など危険な操作のコマンドは大抵対応しています。',
+    chips:['Get-Process','|','Where-Object','{','}','$_.WS -gt 1GB','Stop-Process','-WhatIf'] },
+  { id:'safe-2', theme:'safety', stage:2, title:'消す前に件数を数える',
+    request:'「Downloads の一時ファイル（.tmp）を掃除したい。消す前に、対象が何件あるか数えてくれ。Get-ChildItem で取って、拡張子が .tmp のものを Measure-Object で数える」',
+    solution:"Get-ChildItem Downloads | Where-Object { $_.Extension -eq '.tmp' } | Measure-Object", judge:'output',
+    clearMemo:'実務メモ： 「消すのは最後。消す前に、まず数を確認する」が鉄則です。思っていた件数と違えば、条件が間違っているサインです。数えるだけなら何も壊れません。',
+    chips:['Get-ChildItem','Downloads','|','Where-Object','{','}',"$_.Extension -eq '.tmp'",'Measure-Object'] },
+  { id:'safe-3', theme:'safety', stage:3, title:'数えてから消す',
+    request:'「では本番だ。90日以上前の .tmp ファイルを対象にしてくれ。まず対象を変数 $targets に集めて、cleanup.log に『対象 ○ 件』と記録してから、$targets を Remove-Item で消してくれ」',
+    solution:"$targets = Get-ChildItem Downloads | Where-Object { $_.Extension -eq '.tmp' -and $_.LastWriteTime -le (Get-Date).AddDays(-90) }\nAdd-Content cleanup.log \"対象 $($targets.Count) 件\"\n$targets | Remove-Item", judge:'state',
+    clearMemo:'実務メモ： 対象を一度変数に集めてから処理すると、「数えた対象」と「消した対象」が必ず同じになります。条件を2回書くと、書き間違いで食い違う事故が起きます。Remove-Item はごみ箱に入らず完全に消えるので、記録とセットで使うのが作法です。',
+    chips:['$targets = Get-ChildItem Downloads','|','Where-Object','{','}',"$_.Extension -eq '.tmp' -and $_.LastWriteTime -le (Get-Date).AddDays(-90)",'Add-Content','cleanup.log','"対象 $($targets.Count) 件"','$targets','Remove-Item'] },
+  { id:'safe-4', theme:'safety', stage:4, title:'安全な削除を関数にする',
+    request:'「この『数えてから消す』処理を、使い回せる関数にしてくれ。名前は Remove-OldTemp、引数 $Days で『何日以上前の .tmp を対象にするか』を受け取る動きで。関数の中でも、消す前に cleanup.log へ『対象 ○ 件』と記録すること。作ったら 90 で実行してくれ」',
+    solution:"function Remove-OldTemp($Days) {\n  $t = Get-ChildItem Downloads | Where-Object { $_.Extension -eq '.tmp' -and $_.LastWriteTime -le (Get-Date).AddDays(-$Days) }\n  Add-Content cleanup.log \"対象 $($t.Count) 件\"\n  $t | Remove-Item\n}\nRemove-OldTemp 90",
+    judge:'state', requireFunction:'Remove-OldTemp', hiddenTest:{ calls:['Remove-OldTemp -Days 30'], param:'$Days' },
+    clearMemo:'実務メモ： 危険な処理ほど、関数に閉じ込めて「安全な手順ごと」使い回す価値があります。-Confirm は実行前に確認を求める指定で、対話では有効ですが、自動実行では確認待ちで止まってしまうため、無人実行では使いません（件数の記録で代用します）。',
+    chips:['function','Remove-OldTemp','($Days)','{','}','$t = Get-ChildItem Downloads','|','Where-Object',"$_.Extension -eq '.tmp' -and $_.LastWriteTime -le (Get-Date).AddDays(-$Days)",'Add-Content','cleanup.log','"対象 $($t.Count) 件"','$t','Remove-Item','90'] },
+  { id:'safe-5', theme:'safety', stage:5, title:'掃除を自動化する',
+    request:'「段階4で作った関数 Remove-OldTemp を、毎月の自動実行に登録しよう。ゲーム内コマンド Register-AutoRun に、実行したいコマンドを { } で囲んで渡してくれ。境界は 90日 で。登録したら『1か月進める』で次の月へ進め、古くなった一時ファイルが自動で掃除されるか確かめよう」',
+    solution:'Register-AutoRun { Remove-OldTemp -Days 90 }', judge:'state',
+    preload:"function Remove-OldTemp($Days) { $t = Get-ChildItem Downloads | Where-Object { $_.Extension -eq '.tmp' -and $_.LastWriteTime -le (Get-Date).AddDays(-$Days) }; Add-Content cleanup.log \"対象 $($t.Count) 件\"; $t | Remove-Item }",
+    sim:{ label:'1か月進める（自動実行）', pastText:'1か月が経ちました', destName:'cleanup', ageFiles:30, failHint:'掃除されたファイルが期待と違います。1か月経って境界を越えたファイルも対象です', arrivals:[
+      {Name:'new_cache.tmp', Length:50, LastWriteTime:100, Extension:'.tmp'}
+    ]},
+    clearMemo:'実務メモ： Register-AutoRun はゲーム内専用コマンドです。実務ではタスクスケジューラに Register-ScheduledTask で登録します。自動で消す処理は特に、件数の記録が命綱です。「いつ、何件消えたか」が残っていれば、誤削除に気づけます。',
+    chips:['Register-AutoRun','{','Remove-OldTemp -Days 90','}'] },
+  { id:'res-1', theme:'research', stage:1, title:'ヘルプで調べる',
+    request:'「Test-Connection の使い方が分からない。Get-Help で、このコマンドのヘルプを見せてくれ」',
+    solution:'Get-Help Test-Connection', judge:'output',
+    clearMemo:'実務メモ： Get-Help はコマンドの使い方を表示します。詳しい説明は Get-Help コマンド名 -Full、例だけ見たいときは -Examples です。分からないコマンドに出会ったら、まずヘルプ。これが現場で自立するための第一歩です。',
+    chips:['Get-Help','Test-Connection'] },
+  { id:'res-2', theme:'research', stage:2, title:'プロパティを探す',
+    request:'「ユーザーアカウントには、画面に出ていない項目もありそうだ。Get-LocalUser の結果を Get-Member に渡して、どんなプロパティ（項目）があるか全部見せてくれ」',
+    solution:'Get-LocalUser | Get-Member', judge:'output',
+    clearMemo:'実務メモ： Get-Member は、オブジェクトが持つプロパティとメソッドを全部表示します。テーマ5で「LastLogon は既定の表示に出ない」と学びましたが、こういう隠れた項目は Get-Member で見つけます。パイプの途中に差し込むのが定番の使い方です。',
+    chips:['Get-LocalUser','|','Get-Member'] },
+  { id:'res-3', theme:'research', stage:3, title:'全部の項目で絞る',
+    request:'「LastLogon（最終ログイン）で絞りたい。Select-Object * で全部の項目を出す形にして、180日以上ログインしていないアカウントを抜き出してくれ」',
+    solution:'Get-LocalUser | Select-Object * | Where-Object { $_.LastLogon -le (Get-Date).AddDays(-180) }', judge:'output',
+    clearMemo:'実務メモ： Select-Object * は「全部のプロパティを選ぶ」という指定です。既定の表示は見やすいように絞られているだけで、オブジェクト自体はもっと多くの項目を持っています。なお、まだログインしたことがないアカウント（LastLogon が空）は、比較では一番古いものとして扱われます。',
+    chips:['Get-LocalUser','|','Select-Object','*','Where-Object','{','}','$_.LastLogon -le (Get-Date).AddDays(-180)'] },
+  { id:'res-4', theme:'research', stage:4, title:'コマンド一覧を記録する関数にする',
+    request:'「パターンに合うコマンドの名前を記録する処理を、使い回せる関数にしてくれ。名前は Save-CommandList、引数 $Pattern で検索パターンを受け取って、Get-Command で探したコマンドの名前を cmd-list.log に記録する動きで。作ったら \'Get-*\' で実行してくれ」',
+    solution:"function Save-CommandList($Pattern) {\n  Get-Command $Pattern | ForEach-Object { $_.Name } | Add-Content cmd-list.log\n}\nSave-CommandList 'Get-*'",
+    judge:'state', requireFunction:'Save-CommandList', hiddenTest:{ calls:["Save-CommandList -Pattern 'Test-*'"], param:'$Pattern' },
+    clearMemo:'実務メモ： Get-Command は使えるコマンドを探すコマンドです。名前の一部やワイルドカードで探せます。「やりたいことは決まっているが、コマンド名が分からない」ときの入口になります。',
+    chips:['function','Save-CommandList','($Pattern)','{','}','Get-Command','$Pattern','|','ForEach-Object','$_.Name','Add-Content','cmd-list.log',"'Get-*'"] },
+  { id:'res-5', theme:'research', stage:5, title:'コマンド一覧の記録を自動化する',
+    request:'「段階4で作った関数 Save-CommandList を、毎月の自動実行に登録しよう。ゲーム内コマンド Register-AutoRun に、実行したいコマンドを { } で囲んで渡してくれ。パターンは \'Get-*\' で。登録したら『1か月進める』で次の月へ進め、新しく増えたコマンドも記録されるか確かめよう」',
+    solution:"Register-AutoRun { Save-CommandList 'Get-*' }", judge:'state',
+    preload:"function Save-CommandList($Pattern) { Get-Command $Pattern | ForEach-Object { $_.Name } | Add-Content cmd-list.log }",
+    sim:{ label:'1か月進める（自動実行）', pastText:'1か月が経ちました', destName:'cmd-list', failHint:'記録されたコマンドが期待と違います。新しいコマンドが増えているはずです', newCommands:['Get-Clipboard'] },
+    clearMemo:'実務メモ： Register-AutoRun はゲーム内専用コマンドです。実務ではタスクスケジューラに Register-ScheduledTask で登録します。環境は少しずつ変わります。使えるコマンドの一覧のような「調べた結果」を定期的に残しておくと、変化に気づけます。',
+    chips:['Register-AutoRun','{',"Save-CommandList 'Get-*'",'}'] },
+  { id:'data-1', theme:'data', stage:1, title:'棚卸し結果をCSVで渡す',
+    request:'「棚卸しの結果を、表計算で開ける形で渡したい。レジストリのアンインストール情報を Get-ItemProperty で取って、Export-Csv で apps.csv に書き出してくれ（長いパスはチップにある）」',
+    solution:'Get-ItemProperty HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\* | Export-Csv apps.csv', judge:'state',
+    clearMemo:'実務メモ： Export-Csv は、オブジェクトのプロパティを列にした CSV を書き出します。実務のレポートはテキストではなく CSV で渡すことが多いです。注意点： Windows PowerShell 5.1 の Export-Csv は既定が Shift_JIS 系（ANSI）で、日本語が文字化けすることがあります。-Encoding utf8 を付けるのが安全です（PowerShell 7 の既定は UTF-8）。',
+    chips:['Get-ItemProperty','HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*','|','Export-Csv','apps.csv'] },
+  { id:'data-2', theme:'data', stage:2, title:'JSONで渡す',
+    request:'「今度は、プログラム同士で受け渡せる形にしたい。Adobe のソフトだけを絞って、ConvertTo-Json で JSON にして見せてくれ」',
+    solution:"Get-ItemProperty HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\* | Where-Object { $_.Publisher -like 'Adobe*' } | ConvertTo-Json", judge:'output',
+    clearMemo:'実務メモ： ConvertTo-Json はオブジェクトを JSON 文字列にします。API やほかのツールへ渡すときの標準的な形です。画面表示は読みにくいですが、受け取った側のプログラムがそのまま読み込めます。',
+    chips:['Get-ItemProperty','HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*','|','Where-Object','{','}',"$_.Publisher -like 'Adobe*'",'ConvertTo-Json'] },
+  { id:'data-3', theme:'data', stage:3, title:'CSVを読み戻して整形する',
+    request:'「渡した CSV（apps.csv）を読み戻して、人間が読む一覧に整形してくれ。Import-Csv で読み、各行を『表示名 (提供元)』の形にして app-list.log に記録してくれ。書式演算子 -f を使うと、\'{0} ({1})\' の形で組み立てられる」',
+    solution:'Import-Csv apps.csv | ForEach-Object { "{0} ({1})" -f $_.DisplayName, $_.Publisher } | Add-Content app-list.log', judge:'state',
+    clearMemo:'実務メモ： Import-Csv で読み戻した値は、すべて文字列になります（数値や日付として比べたいときは変換が要ります）。-f は書式演算子で、{0} {1} の場所に後ろの値を順に差し込みます。文字列の組み立ての定番です。',
+    chips:['Import-Csv','apps.csv','|','ForEach-Object','{','}','"{0} ({1})" -f $_.DisplayName, $_.Publisher','Add-Content','app-list.log'] },
+  { id:'data-4', theme:'data', stage:4, title:'CSV書き出しを関数にする',
+    request:'「長く入ったままのソフトを CSV で書き出す処理を、使い回せる関数にしてくれ。名前は Export-StaleApp、引数 $Days で境界の日数を受け取る動きで。InstallDate があって、境界以前のソフトを old-apps.csv に書き出す形で。作ったら 730 で実行してくれ」',
+    solution:"function Export-StaleApp($Days) {\n  $limit = (Get-Date).AddDays(-$Days).ToString('yyyyMMdd')\n  Get-ItemProperty HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\* | Where-Object { $_.InstallDate -and $_.InstallDate -le $limit } | Export-Csv old-apps.csv\n}\nExport-StaleApp 730",
+    judge:'state', requireFunction:'Export-StaleApp', hiddenTest:{ calls:['Export-StaleApp -Days 1000'], param:'$Days' },
+    clearMemo:'実務メモ： 「画面で見る」から「ファイルで渡す」へ。関数が CSV を返す形になると、受け取る側は表計算でもプログラムでも好きに処理できます。',
+    chips:['function','Export-StaleApp','($Days)','{','}',"$limit = (Get-Date).AddDays(-$Days).ToString('yyyyMMdd')",'Get-ItemProperty','HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*','|','Where-Object','$_.InstallDate -and $_.InstallDate -le $limit','Export-Csv','old-apps.csv','730'] },
+  { id:'data-5', theme:'data', stage:5, title:'月次のCSV棚卸しを自動化する',
+    request:'「段階4で作った関数 Export-StaleApp を、毎月の自動実行に登録しよう。ゲーム内コマンド Register-AutoRun に、実行したいコマンドを { } で囲んで渡してくれ。境界は 730日 で。登録したら『1か月進める』で次の棚卸しへ進め、古くなったソフトが CSV に書き出されるか確かめよう」',
+    solution:'Register-AutoRun { Export-StaleApp -Days 730 }', judge:'state',
+    preload:"function Export-StaleApp($Days) { $limit = (Get-Date).AddDays(-$Days).ToString('yyyyMMdd'); Get-ItemProperty HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\* | Where-Object { $_.InstallDate -and $_.InstallDate -le $limit } | Export-Csv old-apps.csv }",
+    sim:{ label:'1か月進める（自動実行）', pastText:'1か月が経ちました', destName:'old-apps', home:'Packages', failHint:'書き出されたソフトが期待と違います。1か月経つと境界を越えるソフトがあります', agePackages:30, arrivals:[
+      {DisplayName:'Chatwork', DisplayVersion:'2.5', Publisher:'Chatwork株式会社', InstallDays:5}
+    ]},
+    clearMemo:'実務メモ： Register-AutoRun はゲーム内専用コマンドです。実務ではタスクスケジューラに Register-ScheduledTask で登録します。構造化された出力（CSV／JSON）で残しておくと、あとから集計や比較ができます。テキストのレポートは「読むため」、CSV は「処理するため」の形です。',
+    chips:['Register-AutoRun','{','Export-StaleApp -Days 730','}'] },
+  { id:'script-1', theme:'script', stage:1, title:'実行ポリシーを確認する',
+    request:'「このPCでスクリプトが実行できるか、まず実行ポリシーを確認してくれ。Get-ExecutionPolicy というコマンドを使う」',
+    solution:'Get-ExecutionPolicy', judge:'output',
+    clearMemo:'実務メモ： 実行ポリシーは、.ps1 スクリプトの実行を許可するかどうかの設定です。既定は Restricted（スクリプト実行不可）になっていることが多く、「スクリプトが動かない」トラブルの定番の原因です。',
+    chips:['Get-ExecutionPolicy'] },
+  { id:'script-2', theme:'script', stage:2, title:'スクリプトファイルに書く',
+    request:'「エラー以上（Level が 2 以下）のイベントを見るコマンドを、スクリプトファイル daily-check.ps1 に保存してくれ。Set-Content で、ファイルにコマンドの文字列を書く形で頼む」',
+    solution:"Set-Content daily-check.ps1 'Get-WinEvent -LogName System | Where-Object { $_.Level -le 2 }'", judge:'state',
+    clearMemo:'実務メモ： スクリプトファイル（.ps1）に書いて保存するのが、実務の「届け方」です。コマンドをその場で打つだけでは、次に同じ作業をするときにまた打ち直しになります。',
+    chips:['Set-Content','daily-check.ps1',"'Get-WinEvent -LogName System | Where-Object { $_.Level -le 2 }'"] },
+  { id:'script-3', theme:'script', stage:3, title:'ポリシーを変えて実行する',
+    request:'「先輩が置いたスクリプト check-disk.ps1（空きの少ないドライブ名を report.log に書く）を実行してくれ。このままだと実行ポリシーで止まるはずだ。Set-ExecutionPolicy で RemoteSigned に変更してから、ファイル名を指定して実行してくれ」',
+    solution:'Set-ExecutionPolicy RemoteSigned\ncheck-disk.ps1', judge:'state',
+    clearMemo:'実務メモ： RemoteSigned は「このPCで作ったスクリプトは実行可、ネットから来たものは署名が必要」という、実務でよく使う設定です。Set-ExecutionPolicy の変更には管理者権限が要る場合があります。ポリシーを安易に Bypass（全許可）にしないのが作法です。',
+    chips:['Set-ExecutionPolicy','RemoteSigned','check-disk.ps1'] },
+  { id:'script-4', theme:'script', stage:4, title:'スクリプト作成を関数にする',
+    request:'「ディスクチェックのスクリプトを作る処理を、使い回せる関数にしてくれ。名前は New-DiskScript、引数 $File で作るファイル名を受け取る動きで。中身は『空きが 10GB より少ないドライブの名前を report.log に書く』コマンドで。作ったら disk-check.ps1 で実行してくれ」',
+    solution:"function New-DiskScript($File) {\n  Set-Content $File 'Get-PSDrive -PSProvider FileSystem | Where-Object { $_.Free -lt 10GB } | ForEach-Object { $_.Name } | Add-Content report.log'\n}\nNew-DiskScript disk-check.ps1",
+    judge:'state', requireFunction:'New-DiskScript', hiddenTest:{ calls:['New-DiskScript -File weekly-check.ps1'], param:'$File' },
+    clearMemo:'実務メモ： スクリプトを「作るスクリプト」まで用意すると、同じ形のチェックを複数のPCや拠点へ配れます。実務では配布したスクリプトの版管理（どれが最新か）も大事になります。',
+    chips:['function','New-DiskScript','($File)','{','}','Set-Content','$File',"'Get-PSDrive -PSProvider FileSystem | Where-Object { $_.Free -lt 10GB } | ForEach-Object { $_.Name } | Add-Content report.log'",'disk-check.ps1'] },
+  { id:'script-5', theme:'script', stage:5, title:'タスクスケジューラの形を知る',
+    request:'「check-disk.ps1 を定期実行に登録しよう。まず実行ポリシーを RemoteSigned にしてから、ゲーム内コマンド Register-AutoRun に check-disk.ps1 を { } で囲んで登録してくれ。登録したら『1か月進める』で次の月へ進め、自動でチェックが走るか確かめよう」',
+    solution:'Set-ExecutionPolicy RemoteSigned\nRegister-AutoRun { check-disk.ps1 }', judge:'state',
+    sim:{ label:'1か月進める（自動実行）', pastText:'1か月が経ちました', destName:'Report', failHint:'report.log の中身が期待と違います。1か月で空きが減ったドライブも対象に入ります', diskDeltas:[
+      {Name:'G', dFreeGB:-6}
+    ]},
+    clearMemo:'実務メモ： ゲーム内の Register-AutoRun と実物の間にある溝は「スクリプトファイル」です。実務では Register-ScheduledTask で、New-ScheduledTaskAction（実行する .ps1 の指定）と New-ScheduledTaskTrigger（いつ実行するか）を組み合わせて登録します。登録されるのはコマンドではなく、.ps1 ファイルです。だからこそ、スクリプトとして保存し、実行ポリシーを通しておくことが前提になります。',
+    chips:['Set-ExecutionPolicy','RemoteSigned','Register-AutoRun','{','check-disk.ps1','}'] },
+  { id:'remote-1', theme:'remote', stage:1, title:'リモートでプロセスを見る',
+    request:'「db-server の中身を調べたい。Invoke-Command で db-server に接続し、スクリプトブロック { } の中で Get-Process を実行して、向こうのプロセスを見せてくれ」',
+    solution:'Invoke-Command -ComputerName db-server -ScriptBlock { Get-Process }', judge:'output',
+    clearMemo:'実務メモ： Invoke-Command は、リモートのコンピューターでコマンドを実行し、結果を手元に返します。結果には接続先を示す PSComputerName が付きます。リモート実行には WinRM の有効化と権限が必要です。',
+    chips:['Invoke-Command','-ComputerName','db-server','-ScriptBlock','{','Get-Process','}'] },
+  { id:'remote-2', theme:'remote', stage:2, title:'CIMでサービスを調べる',
+    request:'「db-server のサービスの状態を、CIM で調べてくれ。Get-CimInstance でクラス Win32_Service を db-server から取り、状態（State）が Stopped のものだけ見せてくれ」',
+    solution:"Get-CimInstance -ClassName Win32_Service -ComputerName db-server | Where-Object { $_.State -eq 'Stopped' }", judge:'output',
+    clearMemo:'実務メモ： Get-CimInstance は CIM（共通情報モデル）経由で、OS やサービスやプロセスの情報を取るコマンドです。Win32_Service の状態は State（Running／Stopped）という項目に入っています。リモートの情報取得の標準的な手段です。',
+    chips:['Get-CimInstance','-ClassName','Win32_Service','-ComputerName','db-server','|','Where-Object','{','}',"$_.State -eq 'Stopped'"] },
+  { id:'remote-3', theme:'remote', stage:3, title:'全サーバーの止まったサービスを記録する',
+    request:'「監視対象リスト servers.txt のサーバー全部について、止まっている（Stopped）サービスを調べ、remote-check.log に『サーバー名 サービス名』の形で記録してくれ。1台ずつ Invoke-Command で調べる形で頼む」',
+    solution:'foreach ($s in Get-Content servers.txt) {\n  Invoke-Command -ComputerName $s -ScriptBlock { Get-Service } | Where-Object { $_.Status -eq \'Stopped\' } | ForEach-Object { Add-Content remote-check.log "$s $($_.Name)" }\n}', judge:'state',
+    clearMemo:'実務メモ： 1台ずつ回して集めるのが、複数サーバーの棚卸しの基本形です。リモート先で絞ってから手元で記録すると、通信量も減ります。接続できないサーバーがあるとエラーになるので、実務ではエラー処理（テーマ11）と組み合わせます。',
+    chips:['foreach','($s in Get-Content servers.txt)','{','}','Invoke-Command','-ComputerName','$s','-ScriptBlock','Get-Service','|','Where-Object',"$_.Status -eq 'Stopped'",'ForEach-Object','Add-Content','remote-check.log','"$s $($_.Name)"'] },
+  { id:'remote-4', theme:'remote', stage:4, title:'リモートチェックを関数にする',
+    request:'「この『止まっているサービスを記録する』リモートチェックを、使い回せる関数にしてくれ。名前は Get-RemoteStoppedService、引数 $ComputerName で接続先、$LogPath で記録先ファイルを受け取る動きで。記録は『サーバー名 サービス名』の形で。作ったら web-server と remote-check.log で実行してくれ」',
+    solution:'function Get-RemoteStoppedService($ComputerName, $LogPath) {\n  Invoke-Command -ComputerName $ComputerName -ScriptBlock { Get-Service } | Where-Object { $_.Status -eq \'Stopped\' } | ForEach-Object { Add-Content $LogPath "$ComputerName $($_.Name)" }\n}\nGet-RemoteStoppedService web-server remote-check.log',
+    judge:'state', requireFunction:'Get-RemoteStoppedService', hiddenTest:{ calls:['Get-RemoteStoppedService -ComputerName db-server -LogPath alert-remote.log'], param:'$ComputerName' },
+    clearMemo:'実務メモ： 接続先と記録先を引数にすると、同じ関数で全サーバーを回せます。実務では、対象リストをファイルから読んで関数を繰り返し呼ぶ形に発展させます。',
+    chips:['function','Get-RemoteStoppedService','($ComputerName, $LogPath)','{','}','Invoke-Command','-ComputerName','$ComputerName','-ScriptBlock','Get-Service','|','Where-Object',"$_.Status -eq 'Stopped'",'ForEach-Object','Add-Content','$LogPath','"$ComputerName $($_.Name)"','web-server','remote-check.log'] },
+  { id:'remote-5', theme:'remote', stage:5, title:'リモート監視を自動化する',
+    request:'「段階4で作った関数 Get-RemoteStoppedService を、毎時の自動実行に登録しよう。ゲーム内コマンド Register-AutoRun に、実行したいコマンドを { } で囲んで渡してくれ。接続先は file-server、記録先は remote-check.log で。登録したら『1時間進める』で次の監視タイミングへ進め、状態が変わったサービスが記録されるか確かめよう」',
+    solution:'Register-AutoRun { Get-RemoteStoppedService -ComputerName file-server -LogPath remote-check.log }', judge:'state',
+    preload:'function Get-RemoteStoppedService($ComputerName, $LogPath) { Invoke-Command -ComputerName $ComputerName -ScriptBlock { Get-Service } | Where-Object { $_.Status -eq \'Stopped\' } | ForEach-Object { Add-Content $LogPath "$ComputerName $($_.Name)" } }',
+    sim:{ label:'1時間進める（自動実行）', pastText:'1時間が経ちました', destName:'remote-check', failHint:'記録されたサービスが期待と違います。1時間の間に止まったサービスがあるはずです', remoteDeltas:[
+      {Host:'file-server', Service:'BackupService', Status:'Stopped'}
+    ]},
+    clearMemo:'実務メモ： Register-AutoRun はゲーム内専用コマンドです。実務ではタスクスケジューラに Register-ScheduledTask で登録するか、監視ツールから定期的に Invoke-Command を実行します。これで全16テーマ・80問が揃いました。手元の1台から、複数サーバーの面倒まで見られるようになるのが、リモート実行の力です。',
+    chips:['Register-AutoRun','{','Get-RemoteStoppedService -ComputerName file-server -LogPath remote-check.log','}'] }
 
 ];
 
@@ -670,6 +937,7 @@ function tokenize(src){
     if (c === '|'){ toks.push({t:'pipe'}); i++; continue; }
     if (c === '@'){ toks.push({t:'@'}); i++; continue; }
     if (c === '/'){ toks.push({t:'/'}); i++; continue; }
+    if (c === '+'){ toks.push({t:'+'}); i++; continue; }
     if (c === '='){ toks.push({t:'='}); i++; continue; }
     if (c === '{' || c === '}' || c === '(' || c === ')' || c === ','){ toks.push({t:c}); i++; continue; }
     if (c === '.' && !/[0-9]/.test(src[i+1] || '')){ toks.push({t:'.'}); i++; continue; }
@@ -745,6 +1013,7 @@ function runStatements(cur, env, ctx, input){
     if (tk.t === '}') break;
     if (tk.t === 'word' && tk.v.toLowerCase() === 'function'){ parseFunctionDef(cur, ctx); value = []; continue; }
     if (tk.t === 'word' && tk.v.toLowerCase() === 'if'){ value = parseIf(cur, env, ctx, value); continue; }
+    if (tk.t === 'word' && tk.v.toLowerCase() === 'try'){ value = parseTry(cur, env, ctx); continue; }
     if (tk.t === 'var' && cur.toks[cur.i + 1] && cur.toks[cur.i + 1].t === '='){
       cur.next(); cur.next();
       const nxA = cur.peek();
@@ -760,7 +1029,7 @@ function runStatements(cur, env, ctx, input){
     if (tk.t === 'var' || tk.t === 'num' || tk.t === 'str' || tk.t === '('){
       const v0 = parseOr(cur, ctx);
       if (cur.peek() && cur.peek().t === 'pipe'){
-        value = [v0];
+        value = Array.isArray(v0) ? v0 : [v0];
         while (cur.peek() && cur.peek().t === 'pipe'){ cur.next(); value = execStage(cur, env, ctx, value, true); }
       } else {
         value = v0;
@@ -793,6 +1062,16 @@ function parseIf(cur, env, ctx, input){
   if (cond) return runStatements(new Cur(thenToks), env, ctx, input);
   if (elseToks) return runStatements(new Cur(elseToks), env, ctx, input);
   return [];
+}
+function parseTry(cur, env, ctx){
+  cur.next(); // 'try'
+  const thenToks = captureBlock(cur);
+  const nx = cur.peek();
+  if (!nx || nx.t !== 'word' || nx.v.toLowerCase() !== 'catch') throw new Error('try には catch が必要です');
+  cur.next(); // 'catch'
+  const catchToks = captureBlock(cur);
+  try { return runStatements(new Cur(thenToks), env, ctx, null); }
+  catch (e) { return runStatements(new Cur(catchToks), env, ctx, null); }
 }
 function parseFunctionDef(cur, ctx){
   cur.next(); // 'function'
@@ -831,7 +1110,7 @@ function parseHash(toks){
   while (i < toks.length){
     const k = toks[i];
     if (k.t === 'sep'){ i++; continue; }
-    if (k.t === 'word'){ const key = k.v.toLowerCase(); i++; if (toks[i] && toks[i].t === '=') i++; const v = toks[i]; if (v) o[key] = v.v; i++; continue; }
+    if (k.t === 'word'){ const key = k.v.toLowerCase(); i++; if (toks[i] && toks[i].t === '=') i++; const v = toks[i]; if (v) o[key] = (v.t === 'var') ? { __var: v.v } : v.v; i++; continue; }
     i++;
   }
   return o;
@@ -865,6 +1144,7 @@ function execStage(cur, env, ctx, input, piped){
   return dispatch(name, positional, params, block, input, env, ctx, piped);
 }
 function propOf(obj, name){
+  if (String(name).toLowerCase() === 'count') return Array.isArray(obj) ? obj.length : (obj == null ? 0 : 1);
   if (Array.isArray(obj)) return obj.length === 1 ? propOf(obj[0], name) : (obj.length === 0 ? null : undefined);
   if (obj == null || typeof obj !== 'object') return undefined;
   const key = Object.keys(obj).find(k => k.toLowerCase() === String(name).toLowerCase());
@@ -881,6 +1161,7 @@ function resolveVar(tk, item, ctx, cur){
   else if (tk.v.toLowerCase() === 'true') base = true;
   else if (tk.v.toLowerCase() === 'false') base = false;
   else if (tk.v.toLowerCase() === 'null') base = null;
+  else if (tk.v.toLowerCase() === 'lastexitcode') base = (ctx.lastExitCode !== undefined ? ctx.lastExitCode : 0);
   else base = ctx.vars[tk.v];
   while (cur && cur.peek() && cur.peek().t === '.'){
     cur.next(); const w = cur.next();
@@ -934,12 +1215,32 @@ function dispatch(name, positional, params, block, input, env, ctx, piped){
     return env.Drives.concat(env.PSDrivesExtra || []);
   }
   if (lower === 'get-process' || lower === 'gps'){
-    if (!env.Processes) throw new Error('このテーマでは Get-Process は使えません');
-    return env.Processes.slice().sort((a, b) => a.Name.toLowerCase() < b.Name.toLowerCase() ? -1 : 1);
+    const srcP = (ctx.remoteHost && ctx.remoteHost.Processes) ? ctx.remoteHost.Processes : env.Processes;
+    if (!srcP) throw new Error('このテーマでは Get-Process は使えません');
+    return srcP.slice().sort((a, b) => a.Name.toLowerCase() < b.Name.toLowerCase() ? -1 : 1);
   }
   if (lower === 'get-service' || lower === 'gsv'){
-    if (!env.Services) throw new Error('このテーマでは Get-Service は使えません');
-    return env.Services.slice().sort((a, b) => a.Name.toLowerCase() < b.Name.toLowerCase() ? -1 : 1);
+    const srcS = (ctx.remoteHost && ctx.remoteHost.Services) ? ctx.remoteHost.Services : env.Services;
+    if (!srcS) throw new Error('このテーマでは Get-Service は使えません');
+    return srcS.slice().sort((a, b) => a.Name.toLowerCase() < b.Name.toLowerCase() ? -1 : 1);
+  }
+  if (lower === 'stop-service'){
+    if (!env.Services && !(ctx.remoteHost && ctx.remoteHost.Services)) throw new Error('このテーマでは Stop-Service は使えません');
+    const svcList = (ctx.remoteHost && ctx.remoteHost.Services) ? ctx.remoteHost.Services : env.Services;
+    const tnS = params['-name'] !== undefined ? params['-name'] : (typeof positional[0] === 'string' ? positional[0] : undefined);
+    if (params['-whatif'] === true){
+      if (tnS !== undefined){ const sv = svcList.find(x => x.Name.toLowerCase() === String(tnS).toLowerCase()); return sv ? ['What if: Performing the operation "Stop-Service" on target "' + sv.Name + '".'] : []; }
+      return items.filter(x => x && typeof x === 'object' && 'Name' in x).map(x => 'What if: Performing the operation "Stop-Service" on target "' + x.Name + '".');
+    }
+    if (tnS !== undefined){
+      const sv = svcList.find(x => x.Name.toLowerCase() === String(tnS).toLowerCase());
+      if (!sv) throw new Error('サービスが見つかりません: ' + tnS);
+      sv.Status = 'Stopped';
+      return [];
+    }
+    if (!piped) throw new Error('止めるサービスを指定してください（-Name か、パイプで渡してください）');
+    for (const it of items) if (it && typeof it === 'object' && 'Status' in it) it.Status = 'Stopped';
+    return [];
   }
   if (lower === 'start-service'){
     if (params['-whatif'] === true) return [];
@@ -958,8 +1259,12 @@ function dispatch(name, positional, params, block, input, env, ctx, piped){
     return [];
   }
   if (lower === 'stop-process'){
-    if (params['-whatif'] === true) return [];
     if (!env.Processes) throw new Error('このテーマでは Stop-Process は使えません');
+    if (params['-whatif'] === true){
+      const tnW = params['-name'] !== undefined ? params['-name'] : (typeof positional[0] === 'string' ? positional[0] : undefined);
+      if (tnW !== undefined){ const pr = env.Processes.find(x => x.Name.toLowerCase() === String(tnW).toLowerCase()); return pr ? ['What if: Performing the operation "Stop-Process" on target "' + pr.Name + ' (' + pr.Id + ')".'] : []; }
+      return items.filter(x => x && typeof x === 'object' && 'Name' in x).map(x => 'What if: Performing the operation "Stop-Process" on target "' + x.Name + ' (' + x.Id + ')".');
+    }
     const targetName = params['-name'] !== undefined ? params['-name'] : (typeof positional[0] === 'string' ? positional[0] : undefined);
     if (targetName !== undefined){
       for (let i = env.Processes.length - 1; i >= 0; i--)
@@ -1031,6 +1336,7 @@ function dispatch(name, positional, params, block, input, env, ctx, piped){
     let out = items.slice();
     const props = positional.filter(p => typeof p === 'string');
     if (params['-property'] !== undefined) props.unshift(params['-property']);
+    if (props.includes('*')) return out;
     if (props.length){
       out = out.map(it => {
         if (!it || typeof it !== 'object') return it;
@@ -1061,7 +1367,7 @@ function dispatch(name, positional, params, block, input, env, ctx, piped){
     return [];
   }
   if (lower === 'remove-item' || lower === 'del' || lower === 'rm' || lower === 'ri'){
-    if (params['-whatif'] === true) return [];
+    if (params['-whatif'] === true) return items.filter(x => x && typeof x === 'object' && 'Name' in x).map(x => 'What if: Performing the operation "Remove-Item" on target "' + x.Name + '".');
     if (!piped && !items.length && !positional.length) throw new Error('削除する対象を指定してください');
     for (const it of items){
       if (!it || typeof it !== 'object' || !('Folder' in it)) continue;
@@ -1075,7 +1381,12 @@ function dispatch(name, positional, params, block, input, env, ctx, piped){
     return env.Users.slice().sort((a, b) => a.Name.toLowerCase() < b.Name.toLowerCase() ? -1 : 1);
   }
   if (lower === 'disable-localuser' || lower === 'enable-localuser'){
-    if (params['-whatif'] === true) return [];
+    if (params['-whatif'] === true){
+      const opW = lower === 'disable-localuser' ? 'Disable-LocalUser' : 'Enable-LocalUser';
+      const tnU = params['-name'] !== undefined ? params['-name'] : (typeof positional[0] === 'string' ? positional[0] : undefined);
+      if (tnU !== undefined) return ['What if: Performing the operation "' + opW + '" on target "' + tnU + '".'];
+      return items.filter(x => x && typeof x === 'object' && 'Name' in x).map(x => 'What if: Performing the operation "' + opW + '" on target "' + x.Name + '".');
+    }
     if (!env.Users) throw new Error('このテーマでは ' + name + ' は使えません');
     const to = (lower === 'enable-localuser');
     const targetName = params['-name'] !== undefined ? params['-name'] : (typeof positional[0] === 'string' ? positional[0] : undefined);
@@ -1133,6 +1444,13 @@ function dispatch(name, positional, params, block, input, env, ctx, piped){
       if (!h) throw new Error('名前が解決できません: ' + n);
       return { Destination:h.Name, Address:h.IPAddress, IPAddress:h.IPAddress, Latency: h.Reachable ? h.Latency : null, Status: h.Reachable ? 'Success' : (h.DownStatus || 'TimedOut') };
     });
+    if (env.StrictPing && params['-quiet'] !== true){
+      const bad = results.find(r => r.Status !== 'Success');
+      if (bad){
+        if (params['-erroraction'] !== undefined && String(params['-erroraction']).toLowerCase() === 'silentlycontinue') return [];
+        throw new Error('Test-Connection: ' + bad.Destination + ' への接続をテストできません（応答がありません）');
+      }
+    }
     if (params['-quiet'] === true) return results.map(r => r.Status === 'Success');
     return results;
   }
@@ -1155,9 +1473,12 @@ function dispatch(name, positional, params, block, input, env, ctx, piped){
     let out = env.Events.slice();
     const fh = params['-filterhashtable'];
     if (fh && fh.__hash){
-      if (fh.__hash.logname !== undefined && String(fh.__hash.logname).toLowerCase() !== 'system') throw new Error('このゲームで読めるのは System ログだけです');
-      if (fh.__hash.id !== undefined) out = out.filter(e => e.Id === Number(fh.__hash.id));
-      if (fh.__hash.level !== undefined) out = out.filter(e => e.Level === Number(fh.__hash.level));
+      const hv = v => (v && typeof v === 'object' && '__var' in v) ? ctx.vars[v.__var] : v;
+      if (fh.__hash.logname !== undefined && String(hv(fh.__hash.logname)).toLowerCase() !== 'system') throw new Error('このゲームで読めるのは System ログだけです');
+      if (fh.__hash.id !== undefined) out = out.filter(e => e.Id === Number(hv(fh.__hash.id)));
+      if (fh.__hash.level !== undefined) out = out.filter(e => e.Level === Number(hv(fh.__hash.level)));
+      if (!out.length && !(params['-erroraction'] !== undefined && String(params['-erroraction']).toLowerCase() === 'silentlycontinue'))
+        throw new Error('Get-WinEvent: 指定された条件に一致するイベントがありません');
     }
     if (params['-maxevents'] !== undefined) out = out.slice(0, Number(params['-maxevents']));
     return out;
@@ -1172,6 +1493,109 @@ function dispatch(name, positional, params, block, input, env, ctx, piped){
     if (!func) throw new Error('Register-AutoRun には { 実行するコマンド } が必要です');
     ctx.autoRun = { func, args: positional.slice(1), named: params };
     return [];
+  }
+  if (lower === 'robocopy'){
+    const srcK = Object.keys(env).find(k => k.toLowerCase() === String(positional[0]).toLowerCase());
+    const dstK = Object.keys(env).find(k => k.toLowerCase() === String(positional[1]).toLowerCase());
+    if (!srcK || !dstK || !Array.isArray(env[srcK]) || !Array.isArray(env[dstK])) throw new Error('robocopy のコピー元とコピー先フォルダを指定してください');
+    let copied = 0;
+    for (const f of env[srcK]){
+      if (!f || typeof f !== 'object' || !('Name' in f)) continue;
+      const ix = env[dstK].findIndex(x => x && x.Name === f.Name);
+      if (ix < 0){ env[dstK].push({ ...f, Folder: dstK }); copied++; }
+      else if (f.LastWriteTime && env[dstK][ix].LastWriteTime && f.LastWriteTime.__date > env[dstK][ix].LastWriteTime.__date){ env[dstK][ix] = { ...f, Folder: dstK }; copied++; }
+    }
+    ctx.lastExitCode = copied > 0 ? 1 : 0;
+    return [];
+  }
+  if (lower === 'get-help'){
+    const hn = String(params['-name'] !== undefined ? params['-name'] : (positional[0] !== undefined ? positional[0] : '')).toLowerCase();
+    const disp = Object.keys(HELP_DB).find(k => k === hn);
+    if (!disp) throw new Error('ヘルプが見つかりません: ' + name);
+    const pretty = disp.replace(/(^|-)\w/g, c => c.toUpperCase());
+    return [pretty, HELP_DB[disp]];
+  }
+  if (lower === 'get-command'){
+    const pat = String(params['-name'] !== undefined ? params['-name'] : (positional[0] !== undefined ? positional[0] : '*'));
+    return (env.Commands || KNOWN_COMMANDS).filter(n => likeMatch(n, pat)).map(n => ({ Name:n, CommandType:'Cmdlet' }));
+  }
+  if (lower === 'get-member'){
+    if (!items.length) throw new Error('Get-Member: オブジェクトが渡されていません（パイプで渡してください）');
+    const first = items.find(x => x && typeof x === 'object');
+    if (!first) throw new Error('Get-Member: オブジェクトが渡されていません');
+    return Object.keys(first).sort().map(k => ({ Name:k, MemberType:'Property' }));
+  }
+  if (lower === 'export-csv'){
+    const path = params['-path'] !== undefined ? params['-path'] : positional[0];
+    if (path === undefined) throw new Error('出力先の CSV ファイルを指定してください');
+    const base = String(path).replace(/\.[^.]*$/, '').toLowerCase();
+    const key = Object.keys(env).find(k => k.toLowerCase() === base) || base;
+    env[key] = csvOf(items);
+    return [];
+  }
+  if (lower === 'import-csv'){
+    const path = params['-path'] !== undefined ? params['-path'] : positional[0];
+    if (path === undefined) throw new Error('読み込む CSV ファイルを指定してください');
+    const base = String(path).replace(/\.[^.]*$/, '').toLowerCase();
+    const key = Object.keys(env).find(k => k.toLowerCase() === base);
+    if (!key || !Array.isArray(env[key]) || !env[key].length) throw new Error('CSV ファイルが見つかりません: ' + path);
+    const header = parseCsvLine(env[key][0]);
+    return env[key].slice(1).filter(l => l !== '').map(l => { const cells = parseCsvLine(l); const o = {}; header.forEach((h, i) => o[h] = cells[i] !== undefined ? cells[i] : ''); return o; });
+  }
+  if (lower === 'convertto-json'){
+    const plain = items.map(it => {
+      if (!it || typeof it !== 'object') return it;
+      const o = {};
+      for (const k of Object.keys(it)) if (k !== 'InstallDays') o[k] = (it[k] && typeof it[k] === 'object' && '__date' in it[k]) ? fmtDate(it[k]) : it[k];
+      return o;
+    });
+    return [JSON.stringify(plain)];
+  }
+  if (lower === 'get-executionpolicy'){
+    return [env.Policy ? env.Policy[0] : 'Restricted'];
+  }
+  if (lower === 'set-executionpolicy'){
+    if (!env.Policy) throw new Error('このテーマでは Set-ExecutionPolicy は使えません');
+    const v = String(positional[0] !== undefined ? positional[0] : '');
+    if (!['Restricted', 'RemoteSigned', 'Unrestricted', 'Bypass'].some(x => x.toLowerCase() === v.toLowerCase())) throw new Error('実行ポリシーの値が違います: ' + v);
+    env.Policy = [v];
+    return [];
+  }
+  if (lower === 'invoke-command'){
+    if (!env.RemoteHosts) throw new Error('このテーマでは Invoke-Command は使えません');
+    const cname = params['-computername'] !== undefined ? params['-computername'] : positional[0];
+    if (cname === undefined) throw new Error('接続先を指定してください（-ComputerName）');
+    if (!block) throw new Error('-ScriptBlock { } が必要です');
+    const host = env.RemoteHosts.find(h => h.Name.toLowerCase() === String(cname).toLowerCase());
+    if (!host) throw new Error('接続できません: ' + cname);
+    const savedOut = ctx.output; ctx.output = [];
+    const savedRemote = ctx.remoteHost; ctx.remoteHost = host;
+    let res;
+    try { runStatements(new Cur(block), env, ctx, null); res = ctx.output; }
+    finally { ctx.output = savedOut; ctx.remoteHost = savedRemote; }
+    return res.map(it => (it && typeof it === 'object') ? { ...it, PSComputerName: host.Name } : it);
+  }
+  if (lower === 'get-ciminstance'){
+    if (!env.RemoteHosts) throw new Error('このテーマでは Get-CimInstance は使えません');
+    const cname = params['-computername'] !== undefined ? params['-computername'] : positional[1];
+    const host = env.RemoteHosts.find(h => h.Name.toLowerCase() === String(cname).toLowerCase());
+    if (!host) throw new Error('接続できません: ' + cname);
+    const cls = String(params['-classname'] !== undefined ? params['-classname'] : (positional[0] !== undefined ? positional[0] : '')).toLowerCase();
+    if (cls === 'win32_service') return host.Services.map(x => ({ Name:x.Name, State:x.Status, StartMode:x.StartType, PSComputerName:host.Name }));
+    if (cls === 'win32_operatingsystem') return [{ Caption:host.OS.Caption, Version:host.OS.Version, PSComputerName:host.Name }];
+    if (cls === 'win32_process') return host.Processes.map(x => ({ ...x, PSComputerName:host.Name }));
+    throw new Error('このゲームで扱えるクラスは Win32_Service / Win32_OperatingSystem / Win32_Process です');
+  }
+  if (lower.endsWith('.ps1')){
+    const base = lower.replace(/\.ps1$/, '');
+    const key = Object.keys(env).find(k => k.toLowerCase() === base);
+    if (!key || !Array.isArray(env[key])) throw new Error('スクリプトファイルが見つかりません: ' + name);
+    if (env.Policy && env.Policy[0] === 'Restricted') throw new Error('このシステムではスクリプトの実行が無効になっています（実行ポリシー: Restricted）');
+    const savedOut = ctx.output; ctx.output = [];
+    let res;
+    try { runProgram(env[key].join('\n'), env, ctx); res = ctx.output; }
+    finally { ctx.output = savedOut; }
+    return res;
   }
   const fnKey = Object.keys(ctx.functions).find(k => k.toLowerCase() === lower);
   if (fnKey){
@@ -1219,7 +1643,18 @@ function parseAnd(cur, ctx){
 }
 function parseTerm(cur, ctx){
   let l = parseOperand(cur, ctx);
-  while (cur.peek() && cur.peek().t === '/'){ cur.next(); const r = parseOperand(cur, ctx); l = l / r; }
+  while (cur.peek() && (cur.peek().t === '/' || cur.peek().t === '+')){
+    const op = cur.next().t; const r = parseOperand(cur, ctx);
+    if (op === '/') l = l / r;
+    else l = (typeof l === 'string' || typeof r === 'string') ? strVal(l) + strVal(r) : l + r;
+  }
+  const ft = cur.peek();
+  if (ft && ft.t === 'param' && ft.v === '-f'){
+    cur.next();
+    const args = [parseOperand(cur, ctx)];
+    while (cur.peek() && cur.peek().t === ','){ cur.next(); args.push(parseOperand(cur, ctx)); }
+    l = String(l).replace(/\{(\d+)\}/g, (m, n) => strVal(args[Number(n)]));
+  }
   return l;
 }
 function parseCmp(cur, ctx){
@@ -1384,6 +1819,12 @@ function themeMakeEnv(theme){
   if (theme === 'software') return makeSoftwareEnv();
   if (theme === 'events') return makeEventsEnv();
   if (theme === 'report') return makeReportEnv();
+  if (theme === 'errors') return makeErrorsEnv();
+  if (theme === 'safety') return makeSafetyEnv();
+  if (theme === 'research') return makeResearchEnv();
+  if (theme === 'data') return makeDataEnv();
+  if (theme === 'script') return makeScriptEnv();
+  if (theme === 'remote') return makeRemoteEnv();
   return makeEnv();
 }
 function themeToItem(theme, raw){
@@ -1395,6 +1836,8 @@ function themeToItem(theme, raw){
   if (theme === 'software') return toPackage(raw);
   if (theme === 'events') return toEvent(raw);
   if (theme === 'report') return toEvent(raw);
+  if (theme === 'errors') return toEvent(raw);
+  if (theme === 'data') return toPackage(raw);
   return toFile(raw);
 }
 function simulate(quest, env, ctx){
@@ -1415,11 +1858,17 @@ function simulate(quest, env, ctx){
   for (const nh of sim.newHosts || []) (env.Hosts || []).push({ ...nh, Ports: { ...(nh.Ports || {}) } });
   if (sim.agePackages) for (const p of env.Packages || []) if (p.InstallDays != null){ p.InstallDays += sim.agePackages; p.InstallDate = fmtYMD(-p.InstallDays); }
   if (sim.ageEvents) for (const e of env.Events || []) if (e.TimeCreated) e.TimeCreated.__date -= sim.ageEvents;
+  for (const nc of sim.newCommands || []) if (env.Commands) env.Commands.push(nc);
+  for (const rd of sim.remoteDeltas || []){
+    const h = (env.RemoteHosts || []).find(x => x.Name === rd.Host);
+    if (h){ const sv = h.Services.find(x => x.Name === rd.Service); if (sv) sv.Status = rd.Status; }
+  }
   if (ctx.autoRun && ctx.autoRun.block) runStatements(new Cur(ctx.autoRun.block), env, ctx, null);
   else if (ctx.autoRun) invokeFunction(ctx, env, ctx.autoRun.func, ctx.autoRun.args || [], ctx.autoRun.named);
 }
 function sigOf(it, withDate){
   if (it && typeof it === 'object'){
+    if ('Caption' in it) return it.Caption + ':' + (it.PSComputerName || '');
     if ('TcpTestSucceeded' in it) return itemName(it) + ':' + it.RemotePort + ':' + it.TcpTestSucceeded;
     if ('Level' in it && 'Id' in it) return it.Level + ':' + it.Id + ':' + (it.TimeCreated ? it.TimeCreated.__date : '');
     if ('Status' in it) return itemName(it) + ':' + it.Status;
@@ -1610,6 +2059,12 @@ document.querySelectorAll('[data-back]').forEach(b => b.addEventListener('click'
 }));
 
 function envHtml(env){
+  if (env.RemoteHosts) return remoteHtml(env);
+  if (env.Policy) return scriptHtml(env);
+  if (env.Commands) return researchHtml(env);
+  if (env.apps) return dataHtml(env);
+  if (env.Events && env.Hosts) return errorsHtml(env);
+  if (env.Downloads && env.Users) return safetyHtml(env);
   if (env.Drives && env.Events) return drivesHtml(env) + eventsHtml(env);
   if (env.Log) return logHtml(env);
   if (env.Drives) return diskHtml(env);
@@ -1670,6 +2125,46 @@ function packagesHtml(env){
 function eventsHtml(env){
   return '<div class="folder">⚠️ イベントログ（System）</div><table>' + env.Events.map(e =>
     `<tr><td class="n">${fmtDate(e.TimeCreated)} ${e.Time}</td><td class="r">${e.LevelDisplayName}</td><td class="r">ID:${e.Id}</td><td class="r">${e.Message}</td></tr>`).join('') + '</table>';
+}
+function textKeysHtml(env, title){
+  let h = '';
+  for (const k of Object.keys(env)){
+    if (!Array.isArray(env[k]) || !env[k].length || typeof env[k][0] !== 'string') continue;
+    if (k === 'targets' || k === 'servers' || k === 'Commands' || k === 'Policy' || k === 'StrictPing') continue;
+    h += '<div class="folder">📄 ' + k + '</div><div class="loglines">' + env[k].map(x => String(x).replace(/</g, '&lt;')).join('\n') + '</div>';
+  }
+  return h;
+}
+function errorsHtml(env){
+  return hostsHtml(env) + eventsHtml(env) +
+    '<div class="folder">📁 Data / Backup</div><table>' + env.Data.map(x => '<tr><td class="n">Data: ' + x.Name + '</td><td class="r">' + fmtDate(x.LastWriteTime) + '</td></tr>').join('') +
+    env.Backup.map(x => '<tr><td class="n">Backup: ' + x.Name + '</td><td class="r">' + fmtDate(x.LastWriteTime) + '</td></tr>').join('') + '</table>' + textKeysHtml(env);
+}
+function safetyHtml(env){
+  let h = processHtml(env) + usersHtml(env);
+  h += '<div class="folder">📁 Downloads</div><table>' + env.Downloads.map(x =>
+    '<tr><td class="n">' + x.Name + '</td><td class="r">' + fmtSize(x.Length) + '</td><td class="r">' + fmtDate(x.LastWriteTime) + '</td></tr>').join('') + '</table>';
+  return h + textKeysHtml(env);
+}
+function researchHtml(env){
+  return usersHtml(env) + '<div class="folder">🔍 調べる道具</div><div class="empty">Get-Help / Get-Command / Get-Member が使えます（コマンドは ' + env.Commands.length + ' 種類）</div>';
+}
+function dataHtml(env){
+  return packagesHtml(env) + textKeysHtml(env);
+}
+function scriptHtml(env){
+  let h = diskHtml(env);
+  h += '<div class="folder">🔐 実行ポリシー</div><div class="loglines">' + env.Policy[0] + '</div>';
+  h += '<div class="folder">📜 check-disk.ps1（先輩が置いたスクリプト）</div><div class="loglines">' + env['check-disk'].map(x => String(x).replace(/</g, '&lt;')).join('\n') + '</div>';
+  return h + textKeysHtml(env);
+}
+function remoteHtml(env){
+  let h = '<div class="folder">📋 servers.txt（対象リスト）</div><table>' + env.servers.map(t => '<tr><td class="n">' + t + '</td></tr>').join('') + '</table>';
+  for (const host of env.RemoteHosts){
+    h += '<div class="folder">🖥️ ' + host.Name + '（' + host.IPAddress + '）</div><table>' +
+      host.Services.map(x => '<tr><td class="n">' + x.Name + '</td><td class="r">' + (x.Status === 'Running' ? '🟢 Running' : '🔴 Stopped') + '</td></tr>').join('') + '</table>';
+  }
+  return h + textKeysHtml(env);
 }
 function openQuest(q){
   currentQuest = q;
@@ -1772,7 +2267,12 @@ renderKbd();
 function formatOutput(output){
   if (!output || !output.length) return '<span class="dim">（出力なし）</span>';
   return output.map(it => {
+    if (typeof it === 'boolean') return it ? 'True' : 'False';
     if (it && typeof it === 'object' && '_count' in it) return 'Count : ' + it._count;
+    if (it && typeof it === 'object' && 'MemberType' in it) return `${it.Name}　${it.MemberType}`;
+    if (it && typeof it === 'object' && 'CommandType' in it) return `${it.Name}　${it.CommandType}`;
+    if (it && typeof it === 'object' && 'Caption' in it) return `${it.Caption}　${it.Version || ''}　(${it.PSComputerName || ''})`;
+    if (it && typeof it === 'object' && 'State' in it && 'StartMode' in it) return `${it.Name}　${it.State}　(${it.PSComputerName || ''})`;
     if (it && typeof it === 'object' && 'Used' in it) return it.Free == null ? `${it.Name}　（${it.Provider || 'PSDrive'}）` : `${it.Name} ドライブ　使用 ${fmtGB(it.Used)}　空き ${fmtGB(it.Free)}`;
     if (it && typeof it === 'object' && 'WS' in it) return `${it.Name}　メモリ ${fmtMB(it.WS)}　CPU ${it.CPU}`;
     if (it && typeof it === 'object' && 'Level' in it && 'Id' in it) return `${fmtDate(it.TimeCreated)} ${it.Time}　${it.LevelDisplayName}　ID:${it.Id}　${it.Message}`;
