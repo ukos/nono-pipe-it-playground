@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>PIPE IT! — Script More, Work Less</title>
 <meta name="description" content="PIPE IT! — PowerShellで運用作業をこなし、スクリプトで自動化していくゲーム。">
 <link rel="icon" type="image/png" sizes="32x32" href="assets/appicon-32.png">
@@ -14,8 +14,8 @@
     --yellow:#ffe81a; --lime:#b6e62e; --green:#37c978; --red:#ff7a6b;
   }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
-  html,body{margin:0;padding:0;background:#020a06}
-  body{font-family:"Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif;color:var(--ink)}
+  html,body{margin:0;padding:0;background:#020a06;overflow-x:hidden;overflow-x:clip}
+  body{font-family:"Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif;color:var(--ink);overscroll-behavior:none}
   .wrap{max-width:480px;margin:0 auto;min-height:100dvh;position:relative;
     padding:calc(14px + env(safe-area-inset-top)) 14px calc(24px + env(safe-area-inset-bottom));
     background-size:cover;background-position:top center;background-repeat:no-repeat}
