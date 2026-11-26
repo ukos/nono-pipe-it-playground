@@ -102,7 +102,7 @@
     <img class="logo" src="assets/logo.jpg" alt="PIPE IT! — Script More, Work Less">
     <button class="bigbtn" id="btn-start">▶ はじめる</button>
     <div class="panel" style="text-align:left"><h3>自動化の進み具合</h3><div class="autobar"><i id="auto-fill" style="width:0%"></i></div><div class="autotext" id="auto-text"></div></div>
-    <p class="note">PowerShell のコマンドで日々の運用作業をこなすゲームです。（バージョン 0.17）最初は手打ち、覚えたらスクリプト化、そして自動化へ。<br>Microsoft、Windows、PowerShell は Microsoft グループの商標です。本アプリは非公式の学習ゲームで、Microsoft とは関係ありません。</p>
+    <p class="note">PowerShell のコマンドで日々の運用作業をこなすゲームです。（バージョン 0.18）最初は手打ち、覚えたらスクリプト化、そして自動化へ。<br>Microsoft、Windows、PowerShell は Microsoft グループの商標です。本アプリは非公式の学習ゲームで、Microsoft とは関係ありません。</p>
   </section>
 
   <!-- themes -->
@@ -450,24 +450,54 @@ function makeRemoteEnv(){
 }
 function fmtSize(bytes){ const kb = bytes / 1024; return (Math.round(kb * 10) / 10) + ' KB'; }
 const THEMES = [
-  {id:'files',   name:'ファイル整理',           icon:'assets/obj-folder.png',  bg:'assets/bg-files.jpg',   ready:true},
-  {id:'log',     name:'ログ調査',               icon:'assets/obj-log.png',     bg:'assets/bg-log.jpg',     ready:true},
-  {id:'disk',    name:'ディスク棚卸し',         icon:'assets/obj-disk.png',    bg:'assets/bg-disk.jpg',    ready:true},
-  {id:'process', name:'プロセス・サービス監視', icon:'assets/obj-gear.png',    bg:'assets/bg-process.jpg', ready:true},
-  {id:'users',   name:'ユーザーアカウント管理', icon:'assets/obj-idbadge.png', bg:'assets/bg-users.jpg',   ready:true},
-  {id:'backup',  name:'バックアップ運用',       icon:'assets/obj-tape.png',    bg:'assets/bg-backup.jpg',  ready:true},
-  {id:'network', name:'ネットワーク疎通確認',   icon:'assets/obj-router.png',  bg:'assets/bg-network.jpg', ready:true},
-  {id:'software',name:'ソフトウェア棚卸し',     icon:'assets/obj-software.png',bg:'assets/bg-software.jpg',ready:true},
-  {id:'events',  name:'イベントログ監視',       icon:'assets/obj-warning.png', bg:'assets/bg-events.jpg',  ready:true},
-  {id:'report',  name:'定例レポート作成',       icon:'assets/obj-report.png',  bg:'assets/bg-report.jpg',  ready:true},
-  {id:'errors',  name:'エラー処理',             icon:'assets/obj-warning.png', bg:'assets/bg-events.jpg',  ready:true},
-  {id:'safety',  name:'安全な実行',             icon:'assets/obj-gear.png',    bg:'assets/bg-process.jpg', ready:true},
-  {id:'research',name:'自分で調べる',           icon:'assets/obj-log.png',     bg:'assets/bg-log.jpg',     ready:true},
-  {id:'data',    name:'データの受け渡し',       icon:'assets/obj-software.png',bg:'assets/bg-software.jpg',ready:true},
-  {id:'script',  name:'スクリプトとして届ける', icon:'assets/obj-report.png',  bg:'assets/bg-report.jpg',  ready:true},
-  {id:'remote',  name:'リモート実行',           icon:'assets/obj-router.png',  bg:'assets/bg-network.jpg', ready:true}
+  {id:'files',   name:'ファイル整理',           icon:'assets/obj-folder.png',  bg:'assets/bg-files.jpg',   ready:true, level:1},
+  {id:'log',     name:'ログ調査',               icon:'assets/obj-log.png',     bg:'assets/bg-log.jpg',     ready:true, level:2},
+  {id:'disk',    name:'ディスク棚卸し',         icon:'assets/obj-disk.png',    bg:'assets/bg-disk.jpg',    ready:true, level:1},
+  {id:'process', name:'プロセス・サービス監視', icon:'assets/obj-gear.png',    bg:'assets/bg-process.jpg', ready:true, level:2},
+  {id:'users',   name:'ユーザーアカウント管理', icon:'assets/obj-idbadge.png', bg:'assets/bg-users.jpg',   ready:true, level:3},
+  {id:'backup',  name:'バックアップ運用',       icon:'assets/obj-tape.png',    bg:'assets/bg-backup.jpg',  ready:true, level:4},
+  {id:'network', name:'ネットワーク疎通確認',   icon:'assets/obj-router.png',  bg:'assets/bg-network.jpg', ready:true, level:3},
+  {id:'software',name:'ソフトウェア棚卸し',     icon:'assets/obj-software.png',bg:'assets/bg-software.jpg',ready:true, level:4},
+  {id:'events',  name:'イベントログ監視',       icon:'assets/obj-warning.png', bg:'assets/bg-events.jpg',  ready:true, level:5},
+  {id:'report',  name:'定例レポート作成',       icon:'assets/obj-report.png',  bg:'assets/bg-report.jpg',  ready:true, level:6},
+  {id:'errors',  name:'エラー処理',             icon:'assets/obj-warning.png', bg:'assets/bg-events.jpg',  ready:true, level:7},
+  {id:'safety',  name:'安全な実行',             icon:'assets/obj-gear.png',    bg:'assets/bg-process.jpg', ready:true, level:7},
+  {id:'research',name:'自分で調べる',           icon:'assets/obj-log.png',     bg:'assets/bg-log.jpg',     ready:true, level:5},
+  {id:'data',    name:'データの受け渡し',       icon:'assets/obj-software.png',bg:'assets/bg-software.jpg',ready:true, level:6},
+  {id:'script',  name:'スクリプトとして届ける', icon:'assets/obj-report.png',  bg:'assets/bg-report.jpg',  ready:true, level:8},
+  {id:'remote',  name:'リモート実行',           icon:'assets/obj-router.png',  bg:'assets/bg-network.jpg', ready:true, level:8}
 ];
 const STAGE_NAMES = ['単発コマンド','パイプライン','条件分岐・繰り返し','関数化・スクリプト化','自動実行'];
+/* Theme unlock by level (user decision 2026-11-26): level 1 themes are open
+   from the start; clearing every theme of a level (stage 5) unlocks all
+   themes of the next level at once. Unlock state is derived only from the
+   cleared record, so an existing save never loses access: a theme with any
+   cleared stage is always treated as unlocked, and a theme marked auto
+   counts as fully cleared even if its stage list is incomplete. */
+const MAX_THEME_LEVEL = Math.max(...THEMES.map(t => t.level));
+function themesAtLevel(level){ return THEMES.filter(t => t.level === level); }
+function effectiveCleared(save){
+  const out = {};
+  const cleared = (save && save.cleared) || {};
+  for (const id of Object.keys(cleared)) out[id] = (cleared[id] || []).slice();
+  const auto = (save && save.auto) || {};
+  for (const id of Object.keys(auto)){
+    if (auto[id]){ if (!out[id]) out[id] = []; if (!out[id].includes(5)) out[id].push(5); }
+  }
+  return out;
+}
+function themeFullyCleared(cleared, themeId){ return ((cleared || {})[themeId] || []).includes(5); }
+function unlockedThemeLevel(cleared){
+  let lv = 1;
+  while (lv < MAX_THEME_LEVEL && themesAtLevel(lv).every(t => themeFullyCleared(cleared, t.id))) lv++;
+  return lv;
+}
+function isThemeUnlocked(cleared, theme){
+  if (!theme.ready) return false;
+  if (theme.level <= unlockedThemeLevel(cleared)) return true;
+  const stages = (cleared || {})[theme.id] || [];
+  return stages.length > 0;
+}
 const QUESTS = [
   { id:'files-1', theme:'files', stage:1, title:'フォルダの中身を一覧する',
     request:'情シス担当の先輩から。「Downloads フォルダに何が入っているか、まず中身を全部見せてくれ」',
@@ -2184,16 +2214,22 @@ function renderThemes(){
   renderAuto();
   setBg('assets/bg-common.jpg');
   const list = $('theme-list'); list.innerHTML = '';
+  const eff = effectiveCleared(save);
   for (const th of THEMES){
     const btn = document.createElement('button'); btn.className = 'tbtn';
     const cleared = clearedStages(th.id);
-    let right;
-    if (!th.ready) right = '<span class="badge dim">準備中</span>';
-    else if (save.auto[th.id]) right = '<span class="badge">自動化済み</span>';
-    else right = '<span class="dots">' + [1,2,3,4,5].map(n => cleared.includes(n) ? '●' : '○').join('') + '</span>';
-    btn.innerHTML = `<img src="${th.icon}" alt=""><span class="tt"><b>${th.name}</b><span>${th.ready ? '全5段階' : 'これから追加されます'}</span></span>${right}`;
-    btn.disabled = !th.ready;
-    if (th.ready) btn.addEventListener('click', () => { renderStages(th); show('screen-stages'); });
+    const unlocked = th.ready && isThemeUnlocked(eff, th);
+    let right, sub;
+    if (!th.ready){ right = '<span class="badge dim">準備中</span>'; sub = 'これから追加されます'; }
+    else if (!unlocked){ right = '<span class="badge dim">🔒 ロック中</span>'; sub = `レベル${th.level} ・ レベル${th.level - 1}のテーマを全部クリアすると解放`; }
+    else {
+      sub = `レベル${th.level} ・ 全5段階`;
+      if (save.auto[th.id]) right = '<span class="badge">自動化済み</span>';
+      else right = '<span class="dots">' + [1,2,3,4,5].map(n => cleared.includes(n) ? '●' : '○').join('') + '</span>';
+    }
+    btn.innerHTML = `<img src="${th.icon}" alt=""><span class="tt"><b>${th.name}</b><span>${sub}</span></span>${right}`;
+    btn.disabled = !unlocked;
+    if (unlocked) btn.addEventListener('click', () => { renderStages(th); show('screen-stages'); });
     list.appendChild(btn);
   }
 }
