@@ -102,7 +102,7 @@
     <img class="logo" src="assets/logo.jpg" alt="PIPE IT! — Script More, Work Less">
     <button class="bigbtn" id="btn-start">▶ はじめる</button>
     <div class="panel" style="text-align:left"><h3>自動化の進み具合</h3><div class="autobar"><i id="auto-fill" style="width:0%"></i></div><div class="autotext" id="auto-text"></div></div>
-    <p class="note">PowerShell のコマンドで日々の運用作業をこなすゲームです。最初は手打ち、覚えたらスクリプト化、そして自動化へ。<br>Microsoft、Windows、PowerShell は Microsoft グループの商標です。本アプリは非公式の学習ゲームで、Microsoft とは関係ありません。</p>
+    <p class="note">PowerShell のコマンドで日々の運用作業をこなすゲームです。（バージョン 0.14）最初は手打ち、覚えたらスクリプト化、そして自動化へ。<br>Microsoft、Windows、PowerShell は Microsoft グループの商標です。本アプリは非公式の学習ゲームで、Microsoft とは関係ありません。</p>
   </section>
 
   <!-- themes -->
@@ -222,8 +222,14 @@ function baseDrives(){ return [
   {Name:'G', Used:120, Free:12},
   {Name:'H', Used:980, Free:20}
 ];}
+const EXTRA_DRIVES = [
+  {Name:'Alias', Provider:'Alias', Used:null, Free:null},
+  {Name:'Cert', Provider:'Certificate', Used:null, Free:null},
+  {Name:'Env', Provider:'Environment', Used:null, Free:null},
+  {Name:'HKLM', Provider:'Registry', Used:null, Free:null}
+];
 function makeDiskEnv(){
-  return { Drives: baseDrives().map(d => ({ Name:d.Name, Used:d.Used * GB, Free:d.Free * GB })), Report: [] };
+  return { Drives: baseDrives().map(d => ({ Name:d.Name, Used:d.Used * GB, Free:d.Free * GB })), PSDrivesExtra: EXTRA_DRIVES.map(d => ({ ...d })), Report: [] };
 }
 /* ---- theme: process ---- */
 const MB = 1024 * 1024;
@@ -293,60 +299,62 @@ function makeBackupEnv(){
 }
 /* ---- theme: network ---- */
 function baseHosts(){ return [
-  {Name:'vpn-gateway', IPAddress:'192.168.1.1',  Reachable:true,  Latency:3,  Ports:{}},
-  {Name:'web-server',  IPAddress:'192.168.1.10', Reachable:true,  Latency:12, Ports:{80:true, 443:true}},
-  {Name:'db-server',   IPAddress:'192.168.1.20', Reachable:true,  Latency:25, Ports:{1433:true}},
-  {Name:'file-server', IPAddress:'192.168.1.30', Reachable:false, Latency:null, Ports:{}},
-  {Name:'mail-server', IPAddress:'192.168.1.40', Reachable:true,  Latency:40, Ports:{587:true}},
-  {Name:'printer',     IPAddress:'192.168.1.50', Reachable:true,  Latency:8,  Ports:{9100:true}}
+  {Name:'vpn-gateway', IPAddress:'192.168.1.1',  Reachable:true,  Latency:1,  Ports:{}},
+  {Name:'web-server',  IPAddress:'192.168.1.10', Reachable:true,  Latency:1, Ports:{80:true, 443:true}},
+  {Name:'db-server',   IPAddress:'192.168.1.20', Reachable:true,  Latency:2, Ports:{1433:true}},
+  {Name:'file-server', IPAddress:'192.168.1.30', Reachable:false, Latency:null, DownStatus:'DestinationHostUnreachable', Ports:{}},
+  {Name:'mail-server', IPAddress:'192.168.1.40', Reachable:true,  Latency:30, Ports:{587:true}},
+  {Name:'printer',     IPAddress:'192.168.1.50', Reachable:true,  Latency:0,  Ports:{9100:true}}
 ];}
 function makeNetworkEnv(){
   return { targets: baseHosts().map(h => h.Name), Hosts: baseHosts().map(h => ({ ...h, Ports: { ...h.Ports } })) };
 }
 /* ---- theme: software ---- */
 function basePackages(){ return [
-  {Name:'Adobe Acrobat Reader', Version:'24.0', Publisher:'Adobe', InstallDate:30},
-  {Name:'Adobe Flash Player 32', Version:'32.0', Publisher:'Adobe', InstallDate:1500},
-  {Name:'Google Chrome', Version:'130.0', Publisher:'Google', InstallDate:10},
-  {Name:'Java 8', Version:'8.0.202', Publisher:'Oracle', InstallDate:1200},
-  {Name:'Microsoft Office 2021', Version:'16.0', Publisher:'Microsoft', InstallDate:200},
-  {Name:'Slack', Version:'4.38', Publisher:'Slack Technologies', InstallDate:60},
-  {Name:'WinZip 20', Version:'20.0', Publisher:'Corel', InstallDate:900},
-  {Name:'Zoom', Version:'6.0', Publisher:'Zoom', InstallDate:15},
-  {Name:'iTunes', Version:'12.12', Publisher:'Apple', InstallDate:710},
-  {Name:'ウイルスバスター', Version:'17.0', Publisher:'トレンドマイクロ', InstallDate:100}
+  {DisplayName:'Adobe Acrobat Reader DC', DisplayVersion:'24.0.0', Publisher:'Adobe Inc.', InstallDays:30},
+  {DisplayName:'Adobe Flash Player 32', DisplayVersion:'32.0.0', Publisher:'Adobe Systems Incorporated', InstallDays:1500},
+  {DisplayName:'Google Chrome', DisplayVersion:'150.0.7871.100', Publisher:'Google LLC', InstallDays:10},
+  {DisplayName:'Java 8 Update 202', DisplayVersion:'8.0.2020.8', Publisher:'Oracle Corporation', InstallDays:1200},
+  {DisplayName:'Microsoft Office 2021', DisplayVersion:'16.0.14334', Publisher:'Microsoft Corporation', InstallDays:200},
+  {DisplayName:'Slack', DisplayVersion:'4.38.0', Publisher:'Slack Technologies, Inc.', InstallDays:60},
+  {DisplayName:'WinZip 20', DisplayVersion:'20.0.0', Publisher:'Corel Corporation', InstallDays:900},
+  {DisplayName:'Zoom', DisplayVersion:'6.0.0', Publisher:'Zoom Video Communications, Inc.', InstallDays:null},
+  {DisplayName:'iTunes', DisplayVersion:'12.12.0', Publisher:'Apple Inc.', InstallDays:710},
+  {DisplayName:'ウイルスバスター クラウド', DisplayVersion:'17.0.0', Publisher:'Trend Micro Inc.', InstallDays:100}
 ];}
 function toPackage(p){
-  return { Name:p.Name, Version:p.Version, Publisher:p.Publisher, InstallDate:{ __date:-p.InstallDate } };
+  return { DisplayName:p.DisplayName, DisplayVersion:p.DisplayVersion, Publisher:p.Publisher, InstallDate: p.InstallDays == null ? '' : fmtYMD(-p.InstallDays), InstallDays: p.InstallDays };
 }
 function makeSoftwareEnv(){
   return { Packages: basePackages().map(toPackage) };
 }
 /* ---- theme: events ---- */
 function baseEvents(){ return [
-  {d:0, Time:'09:12', Id:7034, Level:'エラー', Source:'Service Control Manager', Message:'Print Spooler サービスが予期せず終了しました'},
-  {d:0, Time:'08:45', Id:1014, Level:'警告', Source:'DNS Client', Message:'名前 resolver.local の名前解決がタイムアウトしました'},
-  {d:0, Time:'08:30', Id:6009, Level:'情報', Source:'EventLog', Message:'Microsoft (R) Windows (R) が開始されました'},
-  {d:0, Time:'07:58', Id:41, Level:'エラー', Source:'Kernel-Power', Message:'システムは正常にシャットダウンする前に再起動しました'},
-  {d:1, Time:'15:20', Id:7034, Level:'エラー', Source:'Service Control Manager', Message:'Print Spooler サービスが予期せず終了しました'},
-  {d:1, Time:'11:03', Id:1530, Level:'警告', Source:'User Profile Service', Message:'レジストリ ハイブが他のプロセスによって使用されています'},
-  {d:1, Time:'09:41', Id:7045, Level:'情報', Source:'Service Control Manager', Message:'サービスがインストールされました: Update Orchestrator'},
-  {d:3, Time:'22:17', Id:7, Level:'エラー', Source:'Disk', Message:'デバイス Disk0 に不良ブロックがあります'},
-  {d:3, Time:'22:17', Id:51, Level:'警告', Source:'Disk', Message:'ページング操作中にエラーが検出されました'},
-  {d:5, Time:'18:02', Id:6006, Level:'情報', Source:'EventLog', Message:'イベント ログ サービスが停止されました'},
-  {d:7, Time:'10:26', Id:7034, Level:'エラー', Source:'Service Control Manager', Message:'Print Spooler サービスが予期せず終了しました'},
-  {d:7, Time:'10:25', Id:6013, Level:'情報', Source:'EventLog', Message:'システム稼働時間は 604800 秒です'}
+  {d:0, Time:'09:12', Id:7034, Level:2, ProviderName:'Service Control Manager', Message:'Print Spooler サービスは予期せぬ原因により終了しました。このサービスの終了は 3 回目です。'},
+  {d:0, Time:'08:45', Id:1014, Level:3, ProviderName:'DNS Client', Message:'名前 resolver.local の名前解決がタイムアウトしました'},
+  {d:0, Time:'08:02', Id:41, Level:1, ProviderName:'Kernel-Power', Message:'システムは正常にシャットダウンする前に再起動しました'},
+  {d:0, Time:'08:02', Id:6008, Level:2, ProviderName:'EventLog', Message:'以前のシステム シャットダウンは予期されていませんでした'},
+  {d:0, Time:'08:02', Id:6005, Level:4, ProviderName:'EventLog', Message:'イベント ログ サービスが開始されました'},
+  {d:0, Time:'08:02', Id:6009, Level:4, ProviderName:'EventLog', Message:'Microsoft (R) Windows (R) 10.00. 22631 Multiprocessor Free.'},
+  {d:1, Time:'15:20', Id:7034, Level:2, ProviderName:'Service Control Manager', Message:'Print Spooler サービスは予期せぬ原因により終了しました。このサービスの終了は 2 回目です。'},
+  {d:1, Time:'09:41', Id:7045, Level:4, ProviderName:'Service Control Manager', Message:'サービスがインストールされました: Update Orchestrator'},
+  {d:3, Time:'22:17', Id:7, Level:2, ProviderName:'Disk', Message:'デバイス Disk0 に不良ブロックがあります'},
+  {d:3, Time:'22:17', Id:51, Level:3, ProviderName:'Disk', Message:'ページング操作中にエラーが検出されました'},
+  {d:5, Time:'18:02', Id:6006, Level:4, ProviderName:'EventLog', Message:'イベント ログ サービスが停止されました'},
+  {d:7, Time:'10:26', Id:7034, Level:2, ProviderName:'Service Control Manager', Message:'Print Spooler サービスは予期せぬ原因により終了しました。このサービスの終了は 1 回目です。'},
+  {d:7, Time:'10:25', Id:6013, Level:4, ProviderName:'EventLog', Message:'システム稼働時間は 604800 秒です'}
 ];}
+const LEVEL_NAMES = {1:'重大', 2:'エラー', 3:'警告', 4:'情報'};
 function toEvent(e){
   const days = e.TimeCreatedDays !== undefined ? e.TimeCreatedDays : e.d;
-  return { TimeCreated:{ __date:-days }, Time:e.Time, Id:e.Id, Level:e.Level, Source:e.Source, Message:e.Message };
+  return { TimeCreated:{ __date:-days }, Time:e.Time, Id:e.Id, Level:e.Level, LevelDisplayName: LEVEL_NAMES[e.Level] || '', ProviderName:e.ProviderName, Message:e.Message };
 }
 function makeEventsEnv(){
   return { Events: baseEvents().map(toEvent) };
 }
 /* ---- theme: report (drives + events combined) ---- */
 function makeReportEnv(){
-  return { Drives: baseDrives().map(d => ({ Name:d.Name, Used:d.Used * GB, Free:d.Free * GB })), Events: baseEvents().map(toEvent) };
+  return { Drives: baseDrives().map(d => ({ Name:d.Name, Used:d.Used * GB, Free:d.Free * GB })), PSDrivesExtra: EXTRA_DRIVES.map(d => ({ ...d })), Events: baseEvents().map(toEvent) };
 }
 function fmtSize(bytes){ const kb = bytes / 1024; return (Math.round(kb * 10) / 10) + ' KB'; }
 const THEMES = [
@@ -425,26 +433,26 @@ const QUESTS = [
     solution:'Get-PSDrive', judge:'output',
     chips:['Get-PSDrive'] },
   { id:'disk-2', theme:'disk', stage:2, title:'空きが少ないドライブ',
-    request:'「空き容量が10GB未満のドライブだけ抜き出してくれ」',
-    solution:'Get-PSDrive | Where-Object { $_.Free -lt 10GB }', judge:'output',
-    chips:['Get-PSDrive','|','Where-Object','{','}','$_.Free -lt 10GB'] },
+    request:'「空き容量が10GB未満のドライブだけ抜き出してくれ。Get-PSDrive はディスク以外のドライブも返すので、-PSProvider FileSystem でファイルシステムだけに絞ること」',
+    solution:'Get-PSDrive -PSProvider FileSystem | Where-Object { $_.Free -lt 10GB }', judge:'output',
+    chips:['Get-PSDrive','-PSProvider','FileSystem','|','Where-Object','{','}','$_.Free -lt 10GB'] },
   { id:'disk-3', theme:'disk', stage:3, title:'要注意ドライブを書き出す',
-    request:'「空きが15GB未満のドライブは、名前を report.log に書き出してくれ。1台ずつ調べて、条件に合うものだけだ」',
-    solution:'Get-PSDrive | ForEach-Object { if ($_.Free -lt 15GB) { $_.Name } } | Add-Content report.log', judge:'state',
-    chips:['Get-PSDrive','|','ForEach-Object','{','}','if','($_.Free -lt 15GB)','$_.Name','Add-Content','report.log'] },
+    request:'「空きが15GB未満のドライブは、名前を report.log に書き出してくれ。1台ずつ調べて、条件に合うものだけだ（ディスクだけを対象にすること）」',
+    solution:'Get-PSDrive -PSProvider FileSystem | ForEach-Object { if ($_.Free -lt 15GB) { $_.Name } } | Add-Content report.log', judge:'state',
+    chips:['Get-PSDrive','-PSProvider','FileSystem','|','ForEach-Object','{','}','if','($_.Free -lt 15GB)','$_.Name','Add-Content','report.log'] },
   { id:'disk-4', theme:'disk', stage:4, title:'空きチェックを関数にする',
     request:'「この空きチェックを、使い回せる関数にしてくれ。名前は Check-DiskSpace、引数 $Limit で『空きがこれ未満なら対象』という境界を受け取って、対象ドライブの名前を report.log に書き出す動きで。作ったら 10GB で実行してくれ」',
-    solution:'function Check-DiskSpace($Limit) { Get-PSDrive | Where-Object { $_.Free -lt $Limit } | ForEach-Object { $_.Name } | Add-Content report.log }\nCheck-DiskSpace 10GB',
+    solution:'function Check-DiskSpace($Limit) { Get-PSDrive -PSProvider FileSystem | Where-Object { $_.Free -lt $Limit } | ForEach-Object { $_.Name } | Add-Content report.log }\nCheck-DiskSpace 10GB',
     judge:'state', requireFunction:'Check-DiskSpace', hiddenTest:{ calls:['Check-DiskSpace -Limit 15GB'], param:'$Limit' },
-    chips:['function','Check-DiskSpace','($Limit)','{','}','Get-PSDrive','|','Where-Object','$_.Free -lt $Limit','ForEach-Object','$_.Name','Add-Content','report.log','10GB'] },
+    chips:['function','Check-DiskSpace','($Limit)','{','}','Get-PSDrive','-PSProvider','FileSystem','|','Where-Object','$_.Free -lt $Limit','ForEach-Object','$_.Name','Add-Content','report.log','10GB'] },
   { id:'disk-5', theme:'disk', stage:5, title:'空きチェックを自動化する',
     request:'「段階4で作った関数 Check-DiskSpace を、毎月の自動実行に登録しよう。ゲーム内コマンド Register-AutoRun に、実行したいコマンドを { } で囲んで渡してくれ。境界は 10GB で。登録したら『1か月進める』で次の月へ進め、空きが減ったドライブも自動で書き出されるか確かめよう」',
     solution:'Register-AutoRun { Check-DiskSpace -Limit 10GB }', judge:'state',
-    preload:'function Check-DiskSpace($Limit) { Get-PSDrive | Where-Object { $_.Free -lt $Limit } | ForEach-Object { $_.Name } | Add-Content report.log }',
+    preload:'function Check-DiskSpace($Limit) { Get-PSDrive -PSProvider FileSystem | Where-Object { $_.Free -lt $Limit } | ForEach-Object { $_.Name } | Add-Content report.log }',
     sim:{ label:'1か月進める（自動実行）', pastText:'1か月が経ちました', destName:'Report', verb:'に追加', failHint:'report.log の中身が期待と違います。1か月で空きが減ったドライブも対象に入ります', diskDeltas:[
       {Name:'C', dFreeGB:-7}, {Name:'D', dFreeGB:-10}, {Name:'G', dFreeGB:-6}, {Name:'H', dFreeGB:-11}
     ]},
-    clearMemo:'実務メモ： Register-AutoRun はゲーム内専用コマンドです。実務ではタスクスケジューラに Register-ScheduledTask で登録します。なお、New-ScheduledTaskTrigger には毎月の指定がないため、毎月実行はタスクスケジューラの画面や schtasks /sc monthly で設定します。あと、実物の Get-PSDrive はファイルシステム以外（レジストリや環境変数など）のドライブも返します。ディスクだけを見たいときは Get-PSDrive -PSProvider FileSystem と指定します。',
+    clearMemo:'実務メモ： Register-AutoRun はゲーム内専用コマンドです。実務ではタスクスケジューラに Register-ScheduledTask で登録します。なお、New-ScheduledTaskTrigger には毎月の指定がないため、毎月実行はタスクスケジューラの画面や schtasks /sc monthly で設定します。あと、実物の Get-PSDrive はファイルシステム以外（レジストリや環境変数など）のドライブも返し、それらの Free は空（$null）です。$null は比較では一番小さいものとして扱われるので、-PSProvider FileSystem を忘れると「空き不足」としてずらりと混ざります。ディスクだけを見たいときは必ず指定します。',
     chips:['Register-AutoRun','{','Check-DiskSpace -Limit 10GB','}'] },
   { id:'proc-1', theme:'process', stage:1, title:'動いているプロセスを全部見る',
     request:'「開発用PCで今動いているプロセスを全部見せてくれ」',
@@ -484,19 +492,19 @@ const QUESTS = [
     chips:['Get-LocalUser','|','Where-Object','{','}','$_.LastLogon -le (Get-Date).AddDays(-180)'] },
   { id:'user-3', theme:'users', stage:3, title:'使われていないアカウントを無効化する',
     request:'「有効（Enabled）なのに180日以上ログインしていないアカウントは、無効化してくれ。1つずつ調べて、条件に合うものだけだ。ただし注意が2つ。Administrator はこのPCで唯一の緊急用の管理者アカウントだから、条件に合っても絶対に無効化するな（緊急用は普段ログインしないのが普通だ）。それと、まだ一度もログインしていないアカウント（LastLogon が空のもの）も対象外だ。無効化したアカウント名は、記録として disable-list.log に残してくれ」',
-    solution:"Get-LocalUser | ForEach-Object { if ($_.Enabled -and $null -ne $_.LastLogon -and $_.LastLogon -le (Get-Date).AddDays(-180) -and $_.Name -ne 'Administrator') { Disable-LocalUser -Name $_.Name; $_.Name | Add-Content disable-list.log } }", judge:'state',
+    solution:"Get-LocalUser | ForEach-Object { if ($_.Enabled -and $null -ne $_.LastLogon -and $_.LastLogon -le (Get-Date).AddDays(-180) -and $_.Name -ne 'Administrator') { Disable-LocalUser -Name $_.Name\n $_.Name | Add-Content disable-list.log } }", judge:'state',
     clearMemo:'実務では、Get-LocalUser | Where-Object { 条件 } | Disable-LocalUser という形（状態で絞って、そのままパイプで渡す）で書くのが定番です。組み込みの Administrator かどうかは、SID が -500 で終わるかでも判定できます（$_.SID -like \'*-500\'）。あと、Disable-LocalUser には管理者権限が必要です。',
-    chips:['Get-LocalUser','|','ForEach-Object','{','}',"if ($_.Enabled -and $null -ne $_.LastLogon -and $_.LastLogon -le (Get-Date).AddDays(-180) -and $_.Name -ne 'Administrator')",'Disable-LocalUser -Name $_.Name',';','$_.Name','Add-Content','disable-list.log'] },
+    chips:['Get-LocalUser','|','ForEach-Object','{','}',"if ($_.Enabled -and $null -ne $_.LastLogon -and $_.LastLogon -le (Get-Date).AddDays(-180) -and $_.Name -ne 'Administrator')",'Disable-LocalUser -Name $_.Name','$_.Name','Add-Content','disable-list.log'] },
   { id:'user-4', theme:'users', stage:4, title:'棚卸しの無効化を関数にする',
     request:'「この無効化を、使い回せる関数にしてくれ。名前は Disable-StaleUser、引数 $Days で『何日以上ログインしていないか』の境界を受け取る動きで。Administrator（緊急用の管理者）と、まだ一度もログインしていないアカウントの除外も忘れずに。作ったら 180日 で実行してくれ」',
-    solution:"function Disable-StaleUser($Days) { $limit = (Get-Date).AddDays(-$Days); Get-LocalUser | Where-Object { $_.Enabled -and $null -ne $_.LastLogon -and $_.LastLogon -le $limit -and $_.Name -ne 'Administrator' } | Disable-LocalUser }\nDisable-StaleUser 180",
+    solution:"function Disable-StaleUser($Days) { $limit = (Get-Date).AddDays(-$Days)\n Get-LocalUser | Where-Object { $_.Enabled -and $null -ne $_.LastLogon -and $_.LastLogon -le $limit -and $_.Name -ne 'Administrator' } | Disable-LocalUser }\nDisable-StaleUser 180",
     judge:'state', requireFunction:'Disable-StaleUser', hiddenTest:{ calls:['Disable-StaleUser -Days 90'], param:'$Days' },
     clearMemo:'基準日は $limit のように先に1回だけ計算するのが作法です（条件の中で Get-Date を呼ぶと、件数ぶんだけ基準がずれます）。あと、$null との比較は $null を左に書きます（右に書くと、相手が配列のときに誤判定するためです）。',
     chips:['function','Disable-StaleUser','($Days)','{','}','$limit = (Get-Date).AddDays(-$Days);','Get-LocalUser','|','Where-Object',"$_.Enabled -and $null -ne $_.LastLogon -and $_.LastLogon -le $limit -and $_.Name -ne 'Administrator'",'Disable-LocalUser','180'] },
   { id:'user-5', theme:'users', stage:5, title:'棚卸しを自動化する',
     request:'「段階4で作った関数 Disable-StaleUser を、毎月の自動実行に登録しよう。ゲーム内コマンド Register-AutoRun に、実行したいコマンドを { } で囲んで渡してくれ。境界は 180日 で。登録したら『1か月進める』で次の月へ進め、境界を越えたアカウントが自動で無効化されるか確かめよう」',
     solution:'Register-AutoRun { Disable-StaleUser -Days 180 }', judge:'state',
-    preload:"function Disable-StaleUser($Days) { $limit = (Get-Date).AddDays(-$Days); Get-LocalUser | Where-Object { $_.Enabled -and $null -ne $_.LastLogon -and $_.LastLogon -le $limit -and $_.Name -ne 'Administrator' } | Disable-LocalUser }",
+    preload:"function Disable-StaleUser($Days) { $limit = (Get-Date).AddDays(-$Days)\n Get-LocalUser | Where-Object { $_.Enabled -and $null -ne $_.LastLogon -and $_.LastLogon -le $limit -and $_.Name -ne 'Administrator' } | Disable-LocalUser }",
     sim:{ label:'1か月進める（自動実行）', pastText:'1か月が経ちました', destName:'Users', home:'Users', ageUsers:30, stateKey:'Users', stateLabel:'自動実行で変わったアカウント：', failHint:'無効化されたアカウントが期待と違います。1か月経って境界を越えた人も対象です。Administrator と、まだログインしていない新人は対象外のままです', arrivals:[
       {Name:'newbie', Enabled:true, LastLogonDays:null, Description:'今週入社', SID:'S-1-5-21-3623811015-3361044348-30300820-1010'}
     ]},
@@ -506,139 +514,150 @@ const QUESTS = [
     request:'「バックアップの見直しをするから、まず Data フォルダの中身を全部見せてくれ」',
     solution:'Get-ChildItem Data', judge:'output',
     chips:['Get-ChildItem','Data'] },
-  { id:'backup-2', theme:'backup', stage:2, title:'初回のフルバックアップ',
-    request:'「Data の中身を全部、Backup フォルダにコピーしてくれ。初回のフルバックアップだ（元のファイルはそのまま残す）」',
-    solution:'Get-ChildItem Data | Copy-Item -Destination Backup', judge:'state',
-    chips:['Get-ChildItem','Data','|','Copy-Item','-Destination','Backup'] },
-  { id:'backup-3', theme:'backup', stage:3, title:'新しいものだけコピーし直す',
-    request:'「毎回全部コピーすると時間がかかる。7日以内に更新されたファイルだけ、Backup にコピーし直してくれ。1つずつ調べて、条件に合うものだけだ」',
-    solution:'Get-ChildItem Data | ForEach-Object { if ($_.LastWriteTime -ge (Get-Date).AddDays(-7)) { $_ | Copy-Item -Destination Backup } }', judge:'state',
-    clearMemo:'実務では robocopy の /MAXAGE（◯日以内に更新されたものだけ）で同じことをします。差分コピーはバックアップ運用の基本形です。',
-    chips:['Get-ChildItem','Data','|','ForEach-Object','{','}','if ($_.LastWriteTime -ge (Get-Date).AddDays(-7))','$_','Copy-Item','-Destination','Backup'] },
+  { id:'backup-2', theme:'backup', stage:2, title:'改めて全部取り直す',
+    request:'「前回のバックアップは、一部しか取れていなかったらしい。Data の中身を全部、改めて Backup フォルダにコピーし直してくれ（元のファイルはそのまま残す）。Copy-Item は、コピー元を位置で渡して Data\* のように中身を指定する書き方もできる」',
+    solution:'Copy-Item Data\\* Backup', judge:'state',
+    clearMemo:'実務メモ： コピー先が読み取り専用だと、-Force なしではアクセス拒否になります。サブフォルダも一緒にコピーするときは -Recurse を付けますが、Copy-Item Data Backup -Recurse と書くと Backup の中に Data フォルダごと入ってしまう入れ子の罠があります。中身だけを写すなら Data\* と書きます。なお、コピーされたファイルの更新日時（LastWriteTime）は、元のファイルのものを引き継ぎます。',
+    chips:['Copy-Item','Data\\*','Backup','Get-ChildItem','Data','|','-Destination'] },
+  { id:'backup-3', theme:'backup', stage:3, title:'変わったものだけコピーし直す',
+    request:'「毎回全部コピーすると時間がかかる。Backup と比べて、Backup にまだ無いファイルか、Data の方が新しいファイルだけ、Backup にコピーし直してくれ。1つずつ調べて、条件に合うものだけだ」',
+    solution:'foreach ($f in Get-ChildItem Data) {\n  $b = Get-ChildItem Backup -Filter $f.Name\n  if ($null -eq $b -or $f.LastWriteTime -gt $b.LastWriteTime) {\n    $f | Copy-Item -Destination Backup\n  }\n}', judge:'state',
+    clearMemo:'実務メモ： 「◯日以内に更新されたものだけ」という日数の窓で差分を取ると、ジョブが1回失敗したり遅れたりしただけで、窓の外に出た変更が黙って漏れます。コピー先と比べて「無いもの・古いもの」を拾う形が安全で、robocopy の既定の動き（サイズか時刻が違うものだけコピー）もこの考え方です。',
+    chips:['foreach','($f in Get-ChildItem Data)','{','}','$b = Get-ChildItem Backup -Filter $f.Name','if ($null -eq $b -or $f.LastWriteTime -gt $b.LastWriteTime)','$f','|','Copy-Item','-Destination','Backup'] },
   { id:'backup-4', theme:'backup', stage:4, title:'差分バックアップを関数にする',
-    request:'「この差分コピーを、使い回せる関数にしてくれ。名前は Copy-ChangedFile、引数 $Days で『何日以内に更新されたものか』の境界を受け取る動きで。作ったら 7日 で実行してくれ」',
-    solution:'function Copy-ChangedFile($Days) { $limit = (Get-Date).AddDays(-$Days); Get-ChildItem Data | Where-Object { $_.LastWriteTime -ge $limit } | Copy-Item -Destination Backup }\nCopy-ChangedFile 7',
-    judge:'state', requireFunction:'Copy-ChangedFile', hiddenTest:{ calls:['Copy-ChangedFile -Days 3'], param:'$Days' },
-    chips:['function','Copy-ChangedFile','($Days)','{','}','$limit = (Get-Date).AddDays(-$Days);','Get-ChildItem','Data','|','Where-Object','$_.LastWriteTime -ge $limit','Copy-Item','-Destination','Backup','7'] },
+    request:'「この『比べてコピーする』処理を、使い回せる関数にしてくれ。名前は Copy-ChangedFile、引数 $Source でコピー元、$Destination でコピー先のフォルダを受け取る動きで。作ったら Data から Backup へ実行してくれ」',
+    solution:'function Copy-ChangedFile($Source, $Destination) {\n  foreach ($f in Get-ChildItem $Source) {\n    $b = Get-ChildItem $Destination -Filter $f.Name\n    if ($null -eq $b -or $f.LastWriteTime -gt $b.LastWriteTime) {\n      $f | Copy-Item -Destination $Destination\n    }\n  }\n}\nCopy-ChangedFile Data Backup',
+    judge:'state', requireFunction:'Copy-ChangedFile', hiddenTest:{ calls:['Copy-ChangedFile -Source Backup -Destination Data'], param:'$Source' },
+    chips:['function','Copy-ChangedFile','($Source, $Destination)','{','}','foreach','($f in Get-ChildItem $Source)','$b = Get-ChildItem $Destination -Filter $f.Name','if ($null -eq $b -or $f.LastWriteTime -gt $b.LastWriteTime)','$f','|','Copy-Item','-Destination','$Destination','Data','Backup'] },
   { id:'backup-5', theme:'backup', stage:5, title:'週次バックアップを自動化する',
-    request:'「段階4で作った関数 Copy-ChangedFile を、毎週の自動実行に登録しよう。ゲーム内コマンド Register-AutoRun に、実行したいコマンドを { } で囲んで渡してくれ。境界は 7日 で。登録したら『1週間進める』で次の週へ進め、新しく変わったファイルが自動でコピーされるか確かめよう」',
-    solution:'Register-AutoRun { Copy-ChangedFile -Days 7 }', judge:'state',
-    preload:'function Copy-ChangedFile($Days) { $limit = (Get-Date).AddDays(-$Days); Get-ChildItem Data | Where-Object { $_.LastWriteTime -ge $limit } | Copy-Item -Destination Backup }',
-    sim:{ label:'1週間進める（自動実行）', pastText:'1週間が経ちました', destName:'Backup', home:'Data', ageFiles:7, failHint:'コピーされたファイルが期待と違います。1週間経つと、境界の内と外が入れ替わります', arrivals:[
+    request:'「段階4で作った関数 Copy-ChangedFile を、毎週の自動実行に登録しよう。ゲーム内コマンド Register-AutoRun に、実行したいコマンドを { } で囲んで渡してくれ。コピー元は Data、コピー先は Backup で。登録したら『1週間進める』で次の週へ進め、新しく変わったファイルが自動でコピーされるか確かめよう」',
+    solution:'Register-AutoRun { Copy-ChangedFile Data Backup }', judge:'state',
+    preload:'function Copy-ChangedFile($Source, $Destination) { foreach ($f in Get-ChildItem $Source) { $b = Get-ChildItem $Destination -Filter $f.Name; if ($null -eq $b -or $f.LastWriteTime -gt $b.LastWriteTime) { $f | Copy-Item -Destination $Destination } } }',
+    sim:{ label:'1週間進める（自動実行）', pastText:'1週間が経ちました', destName:'Backup', home:'Data', ageFiles:7, failHint:'コピーされたファイルが期待と違います。比べる形なら、古いまま残っていたファイルも含めて拾えます', arrivals:[
       {Name:'売上集計.xlsx', Folder:'Data', Length:320, LastWriteTime:0},
       {Name:'議事録.docx', Folder:'Data', Length:85, LastWriteTime:1},
       {Name:'請求書.pdf', Folder:'Data', Length:200, LastWriteTime:0},
       {Name:'写真_現場2.jpg', Folder:'Data', Length:2800, LastWriteTime:2}
     ]},
-    clearMemo:'実務メモ： Register-AutoRun はゲーム内専用コマンドです。実務ではタスクスケジューラに Register-ScheduledTask で登録するか、robocopy を定期実行します。あと、バックアップは「取れているか」より「戻せるか」が本番です。定期的なリストア訓練まで含めて運用です。',
-    chips:['Register-AutoRun','{','Copy-ChangedFile -Days 7','}'] },
+    clearMemo:'実務メモ： Register-AutoRun はゲーム内専用コマンドです。実務ではタスクスケジューラに Register-ScheduledTask で登録するか、robocopy を定期実行します。robocopy は既定で「変わったものだけ」をコピーするので /MAXAGE のような日数指定は通常使いません。注意点は2つ。終了コードは 0〜7 が成功（1 は「コピーした」という意味）で、8 以上が失敗です。「0 以外は失敗」と判定すると毎回失敗に見えます。もう1つ、/MIR はコピー元に無いファイルをコピー先から消すので、元の削除や暗号化までそのまま写ります。/MIR だけではバックアップになりません。あと、この上書き式は1世代しか残りません。壊れたファイルが良い版を上書きしてしまうので、実務では日付フォルダなどで複数世代を残します。そして、バックアップは「取れているか」より「戻せるか」が本番です。定期的なリストア訓練まで含めて運用です。',
+    chips:['Register-AutoRun','{','Copy-ChangedFile Data Backup','}'] },
   { id:'net-1', theme:'network', stage:1, title:'pingを打ってみる',
-    request:'「file-server の調子が悪いと連絡があった。まず ping が通るか見てくれ（Test-Connection というコマンドを使う）」',
-    solution:'Test-Connection file-server', judge:'output',
-    chips:['Test-Connection','file-server'] },
+    request:'「file-server の調子が悪いと連絡があった。まず ping が通るか見てくれ（Test-Connection というコマンドを使う）。確認だけなら1回で十分だ。-Count 1 を付けてくれ」',
+    solution:'Test-Connection file-server -Count 1', judge:'output',
+    clearMemo:'実務メモ： 既定では1台に4回 ping するので、応答のないサーバーでは待ち時間がかさみます。確認だけなら -Count 1 が定石です。なお Windows PowerShell 5.1 では、応答がないと結果ではなく赤いエラーが出ます。',
+    chips:['Test-Connection','file-server','-Count','1'] },
   { id:'net-2', theme:'network', stage:2, title:'サービスのポートを確認する',
-    request:'「生きているサーバーで、サービスのポートが開いているか確認してくれ。Test-NetConnection で、web-server の 443、db-server の 1433、mail-server の 25 だ」',
+    request:'「主要なサーバーで、サービスのポートが開いているか確認してくれ。Test-NetConnection で、web-server の 443、db-server の 1433、mail-server の 25 だ」',
     solution:'Test-NetConnection -ComputerName web-server -Port 443\nTest-NetConnection -ComputerName db-server -Port 1433\nTest-NetConnection -ComputerName mail-server -Port 25', judge:'output',
+    clearMemo:'実務メモ： mail-server の 25 が閉じていて 587 だけ開いているのは、このサーバーが社内向けの送信専用（サブミッション）だからで、正常です。あと大事な点： ping（ICMP）はファイアウォールで塞がれていることがあり、サービスが生きていても「疎通なし」に見えます。ping だけで「落ちている」と決めず、ポート確認と合わせて判断するのが実務です。Test-NetConnection は、つながらないとき警告を出しながら ping も試すので、失敗の確認には20秒前後かかります（つながらないときは遅い）。Windows 専用のコマンドです。',
     chips:['Test-NetConnection','-ComputerName','web-server','db-server','mail-server','-Port','443','1433','25'] },
-  { id:'net-3', theme:'network', stage:3, title:'落ちているサーバーを記録する',
-    request:'「対象リスト targets.txt にあるサーバー全部に ping して、通らなかったサーバーの名前を down-list.log に記録してくれ」',
-    solution:"Get-Content targets.txt | Test-Connection | Where-Object { $_.Status -ne 'Success' } | ForEach-Object { $_.Address } | Add-Content down-list.log", judge:'state',
-    chips:['Get-Content','targets.txt','|','Test-Connection','Where-Object','{','}',"$_.Status -ne 'Success'",'ForEach-Object','$_.Address','Add-Content','down-list.log'] },
+  { id:'net-3', theme:'network', stage:3, title:'疎通のないサーバーを記録する',
+    request:'「対象リスト targets.txt にあるサーバー全部に ping して、応答がなかったサーバーの名前を down-list.log に記録してくれ。1台ずつ調べ、Test-Connection の -Quiet で『応答があったか』だけを受け取る形で頼む」',
+    solution:'foreach ($s in Get-Content targets.txt) {\n  if (-not (Test-Connection $s -Count 1 -Quiet)) {\n    Add-Content down-list.log $s\n  }\n}', judge:'state',
+    clearMemo:'実務メモ： -Quiet は「1回でも応答があれば $true、全部失敗なら $false」を返し、エラーも抑えてくれます。結果オブジェクトの形は PowerShell の版で違い（5.1 と 7 で項目名も違う）、名前は結果からではなく、調べた相手の名前から記録するのが確実です。',
+    chips:['foreach','($s in Get-Content targets.txt)','{','}','if (-not (Test-Connection $s -Count 1 -Quiet))','Add-Content','down-list.log','$s'] },
   { id:'net-4', theme:'network', stage:4, title:'死活チェックを関数にする',
-    request:'「この『落ちているサーバーを記録する』処理を、使い回せる関数にしてくれ。名前は Save-DownServer、引数 $ListFile で記録先のファイル名を受け取る動きで。作ったら down-list.log で実行してくれ」',
-    solution:"function Save-DownServer($ListFile) { Get-Content targets.txt | Test-Connection | Where-Object { $_.Status -ne 'Success' } | ForEach-Object { $_.Address } | Add-Content $ListFile }\nSave-DownServer down-list.log",
-    judge:'state', requireFunction:'Save-DownServer', hiddenTest:{ calls:['Save-DownServer -ListFile alert-list.log'], param:'$ListFile' },
-    chips:['function','Save-DownServer','($ListFile)','{','}','Get-Content','targets.txt','|','Test-Connection','Where-Object',"$_.Status -ne 'Success'",'ForEach-Object','$_.Address','Add-Content','$ListFile','down-list.log'] },
+    request:'「この『疎通のないサーバーを記録する』処理を、使い回せる関数にしてくれ。名前は Test-TargetServer、引数 $TargetFile で対象リスト、$LogPath で記録先のファイルを受け取る動きで。作ったら targets.txt と down-list.log で実行してくれ」',
+    solution:'function Test-TargetServer($TargetFile, $LogPath) {\n  foreach ($s in Get-Content $TargetFile) {\n    if (-not (Test-Connection $s -Count 1 -Quiet)) {\n      Add-Content $LogPath $s\n    }\n  }\n}\nTest-TargetServer targets.txt down-list.log',
+    judge:'state', requireFunction:'Test-TargetServer', hiddenTest:{ calls:['Test-TargetServer -TargetFile targets.txt -LogPath alert-list.log'], param:'$TargetFile' },
+    chips:['function','Test-TargetServer','($TargetFile, $LogPath)','{','}','foreach','($s in Get-Content $TargetFile)','if (-not (Test-Connection $s -Count 1 -Quiet))','Add-Content','$LogPath','$s','targets.txt','down-list.log'] },
   { id:'net-5', theme:'network', stage:5, title:'死活監視を自動化する',
-    request:'「段階4で作った関数 Save-DownServer を、毎時の自動実行に登録しよう。ゲーム内コマンド Register-AutoRun に、実行したいコマンドを { } で囲んで渡してくれ。記録先は down-list.log で。登録したら『1時間進める』で次の監視タイミングへ進め、状態が変わったサーバーが記録されるか確かめよう」',
-    solution:'Register-AutoRun { Save-DownServer down-list.log }', judge:'state',
-    preload:"function Save-DownServer($ListFile) { Get-Content targets.txt | Test-Connection | Where-Object { $_.Status -ne 'Success' } | ForEach-Object { $_.Address } | Add-Content $ListFile }",
-    sim:{ label:'1時間進める（自動実行）', pastText:'1時間が経ちました', destName:'down-list', home:'targets', failHint:'記録されたサーバーが期待と違います。1時間の間に、落ちるサーバーも新しく監視対象になるサーバーもあります', arrivals:['chat-server'],
-      newHosts:[{Name:'chat-server', IPAddress:'192.168.1.60', Reachable:true, Latency:15, Ports:{5222:true}}],
-      hostDeltas:[{Name:'mail-server', Reachable:false}] },
-    clearMemo:'実務メモ： Register-AutoRun はゲーム内専用コマンドです。実務ではタスクスケジューラに Register-ScheduledTask でスクリプトを登録するか、Zabbix などの監視ツールを使います。あと、ping（ICMP）がファイアウォールで塞がれていると、サービスが生きていても疎通なしに見えます。Test-NetConnection のポート確認と合わせて判断するのが実務です。',
-    chips:['Register-AutoRun','{','Save-DownServer down-list.log','}'] },
+    request:'「段階4で作った関数 Test-TargetServer を、毎時の自動実行に登録しよう。ゲーム内コマンド Register-AutoRun に、実行したいコマンドを { } で囲んで渡してくれ。対象は targets.txt、記録先は down-list.log で（記録は空の状態から始める）。登録したら『1時間進める』で次の監視タイミングへ進め、状態が変わったサーバーが記録されるか確かめよう」',
+    solution:'Register-AutoRun { Test-TargetServer targets.txt down-list.log }', judge:'state',
+    preload:'function Test-TargetServer($TargetFile, $LogPath) { foreach ($s in Get-Content $TargetFile) { if (-not (Test-Connection $s -Count 1 -Quiet)) { Add-Content $LogPath $s } } }',
+    sim:{ label:'1時間進める（自動実行）', pastText:'1時間が経ちました', destName:'down-list', home:'targets', failHint:'記録されたサーバーが期待と違います。1時間の間に、応答しなくなるサーバーも新しく監視対象になるサーバーもあります', arrivals:['chat-server'],
+      newHosts:[{Name:'chat-server', IPAddress:'192.168.1.60', Reachable:true, Latency:1, Ports:{5222:true}}],
+      hostDeltas:[{Name:'mail-server', Reachable:false, DownStatus:'DestinationHostUnreachable'}] },
+    clearMemo:'実務メモ： Register-AutoRun はゲーム内専用コマンドです。実務ではタスクスケジューラに Register-ScheduledTask でスクリプトを登録するか、Zabbix などの監視ツールを使います。実務の死活監視の間隔は1〜5分が普通で、毎時では粗すぎます（ゲームの時間の進め方は毎時のままです）。あと、追記型の記録は「いつ落ちたか」が分かる履歴として残すのが実務の形で、復旧したかどうかは記録を見比べるか、時刻つきで残して判断します。失敗の種類は1つではありません（応答なし、到達不能など）。「成功以外を拾う」書き方が安全です。',
+    chips:['Register-AutoRun','{','Test-TargetServer targets.txt down-list.log','}'] },
   { id:'sw-1', theme:'software', stage:1, title:'インストール済みソフトの一覧',
-    request:'「このPCに入っているソフトを全部見せてくれ。棚卸しをする（Get-Package というコマンドを使う）」',
-    solution:'Get-Package', judge:'output',
-    chips:['Get-Package'] },
+    request:'「このPCに入っているソフトを全部見せてくれ。棚卸しをする。実務の定番は、レジストリのアンインストール情報（『プログラムと機能』の一覧のもと）を読むことだ。Get-ItemProperty で HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\* を読んでくれ（長いパスはチップにある）」',
+    solution:'Get-ItemProperty HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\*', judge:'output',
+    clearMemo:'実務メモ： 実物では、キーごとにすべての値が縦に並んで表示されるので、もっとずっと長い出力になります。だから段階2以降で、項目を選んで絞って見ます。なお Get-Package というコマンドもありますが、実物には提供元（Publisher）やインストール日の項目がなく、PowerShell 7 ではインストール済みソフトが1件も出ません。棚卸しの定番はこのレジストリです。',
+    chips:['Get-ItemProperty','HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\*'] },
   { id:'sw-2', theme:'software', stage:2, title:'ベンダーで絞り込む',
-    request:'「Adobe のソフトだけ見せてくれ。提供元は Publisher という項目に入っている」',
-    solution:"Get-Package | Where-Object { $_.Publisher -eq 'Adobe' }", judge:'output',
-    chips:['Get-Package','|','Where-Object','{','}',"$_.Publisher -eq 'Adobe'"] },
-  { id:'sw-3', theme:'software', stage:3, title:'古いソフトを記録する',
-    request:'「2年（730日）以上前から入ったままのソフトは、古くて危ないものが混ざっている。インストール日は InstallDate という項目だ。730日以上前のソフトの名前を old-apps.log に記録してくれ」',
-    solution:'Get-Package | Where-Object { $_.InstallDate -le (Get-Date).AddDays(-730) } | ForEach-Object { $_.Name } | Add-Content old-apps.log', judge:'state',
-    chips:['Get-Package','|','Where-Object','{','}','$_.InstallDate -le (Get-Date).AddDays(-730)','ForEach-Object','$_.Name','Add-Content','old-apps.log'] },
+    request:'「Adobe のソフトだけ見せてくれ。提供元は Publisher という項目に入っている。ただし実物の表記は『Adobe Inc.』のように会社名まで入っているので、-like で前方一致にして頼む」',
+    solution:"Get-ItemProperty HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\* | Where-Object { $_.Publisher -like 'Adobe*' }", judge:'output',
+    chips:['Get-ItemProperty','HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\*','|','Where-Object','{','}',"$_.Publisher -like 'Adobe*'"] },
+  { id:'sw-3', theme:'software', stage:3, title:'長く入ったままのソフトを記録する',
+    request:'「2年（730日）以上前から入ったままのソフトを洗い出して、確認リストにしたい。インストール日は InstallDate という項目に yyyyMMdd 形式の文字列で入っている。まず $limit に (Get-Date).AddDays(-730) を yyyyMMdd 形式にした文字列を入れて、InstallDate があって、かつ $limit 以前のソフトの表示名（DisplayName）を old-apps.log に記録してくれ」',
+    solution:"$limit = (Get-Date).AddDays(-730).ToString('yyyyMMdd')\nGet-ItemProperty HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\* | Where-Object { $_.InstallDate -and $_.InstallDate -le $limit } | ForEach-Object { $_.DisplayName } | Add-Content old-apps.log", judge:'state',
+    clearMemo:'実務メモ： InstallDate が空のソフト（このPCでは Zoom）があります。空の値は比較では一番小さいものとして扱われるので、『InstallDate があること』を確認しないと、入れた日が分からないソフトまで「古い」と記録されてしまいます。テーマ5の $null の学びと同じです。yyyyMMdd は桁数が固定なので、文字列のまま大小比較ができます。',
+    chips:["$limit = (Get-Date).AddDays(-730).ToString('yyyyMMdd')",'Get-ItemProperty','HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\*','|','Where-Object','{','}','$_.InstallDate -and $_.InstallDate -le $limit','ForEach-Object','$_.DisplayName','Add-Content','old-apps.log'] },
   { id:'sw-4', theme:'software', stage:4, title:'古いソフトの記録を関数にする',
-    request:'「この『古いソフトを記録する』処理を、使い回せる関数にしてくれ。名前は Save-OldApp、引数 $Days で『何日以上前から入っているものか』の境界を受け取る動きで。作ったら 730 で実行してくれ」',
-    solution:'function Save-OldApp($Days) { $limit = (Get-Date).AddDays(-$Days); Get-Package | Where-Object { $_.InstallDate -le $limit } | ForEach-Object { $_.Name } | Add-Content old-apps.log }\nSave-OldApp 730',
+    request:'「この『長く入ったままのソフトを記録する』処理を、使い回せる関数にしてくれ。名前は Save-OldApp、引数 $Days で『何日以上前から入っているものか』の境界を受け取る動きで。作ったら 730 で実行してくれ」',
+    solution:"function Save-OldApp($Days) {\n  $limit = (Get-Date).AddDays(-$Days).ToString('yyyyMMdd')\n  Get-ItemProperty HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\* | Where-Object { $_.InstallDate -and $_.InstallDate -le $limit } | ForEach-Object { $_.DisplayName } | Add-Content old-apps.log\n}\nSave-OldApp 730",
     judge:'state', requireFunction:'Save-OldApp', hiddenTest:{ calls:['Save-OldApp -Days 1000'], param:'$Days' },
-    chips:['function','Save-OldApp','($Days)','{','}','$limit = (Get-Date).AddDays(-$Days);','Get-Package','|','Where-Object','$_.InstallDate -le $limit','ForEach-Object','$_.Name','Add-Content','old-apps.log','730'] },
+    chips:['function','Save-OldApp','($Days)','{','}',"$limit = (Get-Date).AddDays(-$Days).ToString('yyyyMMdd')",'Get-ItemProperty','HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\*','|','Where-Object','$_.InstallDate -and $_.InstallDate -le $limit','ForEach-Object','$_.DisplayName','Add-Content','old-apps.log','730'] },
   { id:'sw-5', theme:'software', stage:5, title:'月次の棚卸しを自動化する',
     request:'「段階4で作った関数 Save-OldApp を、毎月の自動実行に登録しよう。ゲーム内コマンド Register-AutoRun に、実行したいコマンドを { } で囲んで渡してくれ。境界は 730日 で。登録したら『1か月進める』で次の棚卸しへ進め、古くなったソフトが記録されるか確かめよう」',
     solution:'Register-AutoRun { Save-OldApp -Days 730 }', judge:'state',
-    preload:'function Save-OldApp($Days) { $limit = (Get-Date).AddDays(-$Days); Get-Package | Where-Object { $_.InstallDate -le $limit } | ForEach-Object { $_.Name } | Add-Content old-apps.log }',
-    sim:{ label:'1か月進める（自動実行）', pastText:'1か月が経ちました', destName:'old-apps', home:'Packages', failHint:'記録されたソフトが期待と違います。1か月経つと、境界を越えて「古い」側に入るソフトがあります', agePackages:30, arrivals:[
-      {Name:'Chatwork', Version:'2.5', Publisher:'Chatwork', InstallDate:5}
+    preload:"function Save-OldApp($Days) { $limit = (Get-Date).AddDays(-$Days).ToString('yyyyMMdd'); Get-ItemProperty HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\* | Where-Object { $_.InstallDate -and $_.InstallDate -le $limit } | ForEach-Object { $_.DisplayName } | Add-Content old-apps.log }",
+    sim:{ label:'1か月進める（自動実行）', pastText:'1か月が経ちました', destName:'old-apps', home:'Packages', failHint:'記録されたソフトが期待と違います。1か月経つと、境界を越えて「長く入ったまま」側に入るソフトがあります', agePackages:30, arrivals:[
+      {DisplayName:'Chatwork', DisplayVersion:'2.5', Publisher:'Chatwork株式会社', InstallDays:5}
     ]},
-    clearMemo:'実務メモ： Register-AutoRun はゲーム内専用コマンドです。実務ではタスクスケジューラに Register-ScheduledTask で登録します。あと、古いソフトは「入っていること自体」が攻撃の入り口になります。特にサポートの終わったソフト（EOL）は、棚卸しで見つけたらアンインストールか更新が鉄則です。',
+    clearMemo:'実務メモ： Register-AutoRun はゲーム内専用コマンドです。実務ではタスクスケジューラに Register-ScheduledTask で登録します。ただし日付だけでは危ないソフトは見抜けません。このPCの Office 2021 は、入れてから200日しか経っていませんが、サポートは 2026年10月13日に終了済みです。実務の棚卸しは、バージョンとサポート期限で見ます。あと、ユーザーごとにインストールされるソフト（Zoom、Slack、Chrome など）は HKCU 側に、32ビット版のソフトは WOW6432Node の下に入ります。HKLM だけでは見落とす点に注意です。なお Win32_Product は、問い合わせるだけで MSI の整合性チェック／修復が走ってイベントログに残るので、棚卸しには使いません。',
     chips:['Register-AutoRun','{','Save-OldApp -Days 730','}'] },
   { id:'ev-1', theme:'events', stage:1, title:'イベントログを見る',
-    request:'「このPCのイベントログ（System）を見せてくれ。Get-WinEvent というコマンドで、-LogName System と指定する」',
-    solution:'Get-WinEvent -LogName System', judge:'output',
-    chips:['Get-WinEvent','-LogName','System'] },
-  { id:'ev-2', theme:'events', stage:2, title:'エラーだけを抜き出す',
-    request:'「イベントログの中から、レベルが『エラー』のものだけ見せてくれ。レベルは Level という項目に入っている」',
-    solution:"Get-WinEvent -LogName System | Where-Object { $_.Level -eq 'エラー' }", judge:'output',
-    chips:['Get-WinEvent','-LogName','System','|','Where-Object','{','}',"$_.Level -eq 'エラー'"] },
+    request:'「このPCのイベントログ（System）を、直近20件だけ見せてくれ。Get-WinEvent というコマンドで、-LogName System と -MaxEvents 20 を指定する」',
+    solution:'Get-WinEvent -LogName System -MaxEvents 20', judge:'output',
+    clearMemo:'実務メモ： 実物の System ログは数千〜数万件あります。全部を出すと画面が流れ続けるので、直近だけ取るのが実務の初手です（テーマ2の -Tail と同じ考え方）。',
+    chips:['Get-WinEvent','-LogName','System','-MaxEvents','20'] },
+  { id:'ev-2', theme:'events', stage:2, title:'エラー以上を抜き出す',
+    request:'「イベントログの中から、エラー以上のもの（重大とエラー）だけ見せてくれ。レベルは Level という項目に入っている。ただし Level は数値だ（1＝重大、2＝エラー、3＝警告、4＝情報）。画面に見える『エラー』という名前は LevelDisplayName の方で、比べるときは数値で頼む」',
+    solution:'Get-WinEvent -LogName System | Where-Object { $_.Level -eq 1 -or $_.Level -eq 2 }', judge:'output',
+    clearMemo:'実務メモ： LevelDisplayName は OS の表示言語で変わります（英語版 Windows なら Error）。日本語の文字列で比べるスクリプトは、ほかの PC に持っていくと黙って0件になります。レベルは数値で比べるのが定石で、一番まずい「重大」を見落とさないためにも「エラー以上」で拾います。',
+    chips:['Get-WinEvent','-LogName','System','|','Where-Object','{','}','$_.Level -eq 1 -or $_.Level -eq 2'] },
   { id:'ev-3', theme:'events', stage:3, title:'繰り返すエラーを記録する',
-    request:'「イベントID 7034（サービスが予期せず終了）が何度も出ている。ID が 7034 のイベントのメッセージを spooler.log に記録してくれ。あとでまとめて報告する」',
-    solution:'Get-WinEvent -LogName System | Where-Object { $_.Id -eq 7034 } | ForEach-Object { $_.Message } | Add-Content spooler.log', judge:'state',
-    chips:['Get-WinEvent','-LogName','System','|','Where-Object','{','}','$_.Id -eq 7034','ForEach-Object','$_.Message','Add-Content','spooler.log'] },
+    request:'「イベントID 7034（サービスが予期せず終了）が何度も出ている。-FilterHashtable で ID 7034 を指定して取り、発生時刻とメッセージを spooler.log に記録してくれ。報告に使うので、時刻のないメッセージだけでは困る」',
+    solution:"Get-WinEvent -FilterHashtable @{LogName='System'; Id=7034} | ForEach-Object { \"$($_.TimeCreated) $($_.Message)\" } | Add-Content spooler.log", judge:'state',
+    clearMemo:'実務メモ： -FilterHashtable は実務の定番です。全件を取ってから Where-Object で絞るのは、数万件になる System ログでは遅すぎます。注意点として、-FilterHashtable で1件も見つからないと Get-WinEvent はエラーを出すので、自動実行では -ErrorAction SilentlyContinue とセットで使います。7034 の文面には「何回目か」が入るので、実物では同じ文面にはなりません。',
+    chips:['Get-WinEvent','-FilterHashtable',"@{LogName='System'; Id=7034}",'|','ForEach-Object','{','"','$($_.TimeCreated) $($_.Message)','}','Add-Content','spooler.log'] },
   { id:'ev-4', theme:'events', stage:4, title:'ID指定の記録を関数にする',
-    request:'「この『IDで指定したイベントのメッセージを記録する』処理を、使い回せる関数にしてくれ。名前は Save-EventById、引数 $Id でイベントIDを受け取る動きで。記録先は spooler.log で、作ったら 7034 で実行してくれ」',
-    solution:'function Save-EventById($Id) { Get-WinEvent -LogName System | Where-Object { $_.Id -eq $Id } | ForEach-Object { $_.Message } | Add-Content spooler.log }\nSave-EventById 7034',
-    judge:'state', requireFunction:'Save-EventById', hiddenTest:{ calls:['Save-EventById -Id 7'], param:'$Id' },
-    chips:['function','Save-EventById','($Id)','{','}','Get-WinEvent','-LogName','System','|','Where-Object','$_.Id -eq $Id','ForEach-Object','$_.Message','Add-Content','spooler.log','7034'] },
+    request:'「この『IDで指定したイベントを、時刻つきで記録する』処理を、使い回せる関数にしてくれ。名前は Save-EventById、引数 $Id でイベントID、$Hours で『直近何時間分までか』を受け取る動きで。記録先は spooler.log で、作ったら 7034、直近25時間で実行してくれ」',
+    solution:'function Save-EventById($Id, $Hours) {\n  Get-WinEvent -LogName System | Where-Object { $_.Id -eq $Id -and $_.TimeCreated -ge (Get-Date).AddHours(-$Hours) } | ForEach-Object { "$($_.TimeCreated) $($_.Message)" } | Add-Content spooler.log\n}\nSave-EventById 7034 25',
+    judge:'state', requireFunction:'Save-EventById', hiddenTest:{ calls:['Save-EventById -Id 7 -Hours 100'], param:'$Id' },
+    chips:['function','Save-EventById','($Id, $Hours)','{','}','Get-WinEvent','-LogName','System','|','Where-Object','$_.Id -eq $Id -and $_.TimeCreated -ge (Get-Date).AddHours(-$Hours)','ForEach-Object','"$($_.TimeCreated) $($_.Message)"','Add-Content','spooler.log','7034','25'] },
   { id:'ev-5', theme:'events', stage:5, title:'毎朝のエラーチェックを自動化する',
-    request:'「段階4で作った関数 Save-EventById を、毎朝の自動実行に登録しよう。ゲーム内コマンド Register-AutoRun に、実行したいコマンドを { } で囲んで渡してくれ。ID は 7034 で。登録したら『1日進める』で翌朝へ進め、新しいエラーが記録されるか確かめよう」',
-    solution:'Register-AutoRun { Save-EventById -Id 7034 }', judge:'state',
-    preload:'function Save-EventById($Id) { Get-WinEvent -LogName System | Where-Object { $_.Id -eq $Id } | ForEach-Object { $_.Message } | Add-Content spooler.log }',
+    request:'「段階4で作った関数 Save-EventById を、毎朝の自動実行に登録しよう。ゲーム内コマンド Register-AutoRun に、実行したいコマンドを { } で囲んで渡してくれ。ID は 7034、範囲は直近25時間で。登録したら『1日進める』で翌朝へ進め、新しいエラーが記録されるか確かめよう」',
+    solution:'Register-AutoRun { Save-EventById -Id 7034 -Hours 25 }', judge:'state',
+    preload:'function Save-EventById($Id, $Hours) { Get-WinEvent -LogName System | Where-Object { $_.Id -eq $Id -and $_.TimeCreated -ge (Get-Date).AddHours(-$Hours) } | ForEach-Object { "$($_.TimeCreated) $($_.Message)" } | Add-Content spooler.log }',
     sim:{ label:'1日進める（自動実行）', pastText:'翌朝になりました', destName:'spooler', home:'Events', failHint:'記録されたメッセージが期待と違います。新しい 7034 が増えているはずです', ageEvents:1, arrivals:[
-      {TimeCreatedDays:0, Time:'10:47', Id:1001, Level:'エラー', Source:'Service Control Manager', Message:'BackupService サービスが予期せず終了しました'},
-      {TimeCreatedDays:0, Time:'09:05', Id:7034, Level:'エラー', Source:'Service Control Manager', Message:'Print Spooler サービスが予期せず終了しました'},
-      {TimeCreatedDays:0, Time:'08:12', Id:6009, Level:'情報', Source:'EventLog', Message:'Microsoft (R) Windows (R) が開始されました'}
+      {TimeCreatedDays:0, Time:'10:47', Id:7034, Level:2, ProviderName:'Service Control Manager', Message:'BackupService サービスは予期せぬ原因により終了しました。このサービスの終了は 1 回目です。'},
+      {TimeCreatedDays:0, Time:'09:05', Id:7034, Level:2, ProviderName:'Service Control Manager', Message:'Print Spooler サービスは予期せぬ原因により終了しました。このサービスの終了は 4 回目です。'},
+      {TimeCreatedDays:0, Time:'08:12', Id:6009, Level:4, ProviderName:'EventLog', Message:'Microsoft (R) Windows (R) 10.00. 22631 Multiprocessor Free.'}
     ]},
-    clearMemo:'実務メモ： Register-AutoRun はゲーム内専用コマンドです。実務ではタスクスケジューラに Register-ScheduledTask で登録するか、監視ツールがイベントを集約します。この関数は対象IDの全件を毎回書き出す形なので、実務では「前回チェック以降の分だけ」を取る工夫（時刻で絞る）が要ります。あと、Get-EventLog という古いコマンドもありますが、今は Get-WinEvent が本命です。',
-    chips:['Register-AutoRun','{','Save-EventById -Id 7034','}'] },
+    clearMemo:'実務メモ： 結果を見てください。ID 7034 は「サービスが予期せず終了した」という全サービス共通の ID なので、BackupService の分まで spooler.log に混ざりました。ID だけでは絞り切れない、というのがこのテーマ一番の山場です。スプーラーだけがほしいときは、メッセージやサービス名でも絞ります。範囲の取り方について： 監視の通知は「漏れると困るが、重複は許せる」ものなので、窓を実行間隔より少し広く取る（毎朝の実行なら25時間）のは実務でも使う形です（テーマ6のバックアップで日数の窓が危なかったのとは逆です）。実務のツールは「前回どこまで読んだか（ブックマーク）」を覚えて差分を取ります。あと、Get-EventLog は Windows PowerShell 5.1 までの古いコマンドで、PowerShell 7 にはありません。新しい種類のログも読めないので、今は Get-WinEvent を使います。7045（サービスのインストール）は、攻撃者が仕掛けを残すときにも出る、監視上重要なイベントです。',
+    chips:['Register-AutoRun','{','Save-EventById -Id 7034 -Hours 25','}'] },
   { id:'rep-1', theme:'report', stage:1, title:'エラーの件数を数える',
-    request:'「毎朝の日次レポートを作ろう。まず、イベントログ（System）のエラーの件数を数えてくれ。Get-WinEvent で取って、レベルが『エラー』のものを Measure-Object で数える」',
-    solution:"Get-WinEvent -LogName System | Where-Object { $_.Level -eq 'エラー' } | Measure-Object", judge:'output',
-    chips:['Get-WinEvent','-LogName','System','|','Where-Object','{','}',"$_.Level -eq 'エラー'",'Measure-Object'] },
+    request:'「毎朝の日次レポートを作ろう。まず、イベントログ（System）のエラー以上（重大とエラー、Level が 1 か 2）の件数を数えてくれ。Get-WinEvent で取って、Measure-Object で数える」',
+    solution:'Get-WinEvent -LogName System | Where-Object { $_.Level -eq 1 -or $_.Level -eq 2 } | Measure-Object', judge:'output',
+    chips:['Get-WinEvent','-LogName','System','|','Where-Object','{','}','$_.Level -eq 1 -or $_.Level -eq 2','Measure-Object'] },
   { id:'rep-2', theme:'report', stage:2, title:'空きの少ないドライブを挙げる',
-    request:'「次に、空きが 10GB より少ないドライブを挙げてくれ。Get-PSDrive で取れる」',
-    solution:'Get-PSDrive | Where-Object { $_.Free -lt 10GB }', judge:'output',
-    chips:['Get-PSDrive','|','Where-Object','{','}','$_.Free -lt 10GB'] },
+    request:'「次に、空きが 10GB より少ないドライブを挙げてくれ。Get-PSDrive はディスク以外（Alias や HKLM など、空きが空のもの）も返すので、-PSProvider FileSystem でディスクだけに絞ること」',
+    solution:'Get-PSDrive -PSProvider FileSystem | Where-Object { $_.Free -lt 10GB }', judge:'output',
+    chips:['Get-PSDrive','-PSProvider','FileSystem','|','Where-Object','{','}','$_.Free -lt 10GB'] },
   { id:'rep-3', theme:'report', stage:3, title:'日次レポートを組み立てる',
-    request:'「ではレポートファイル daily-report.log を組み立てよう。まず見出し『== ディスク ==』を書いて、空きが 10GB より少ないドライブの名前を書き、次に見出し『== エラー ==』を書いて、エラーのメッセージを全部書いてくれ」',
-    solution:"'== ディスク ==' | Add-Content daily-report.log\nGet-PSDrive | Where-Object { $_.Free -lt 10GB } | ForEach-Object { $_.Name } | Add-Content daily-report.log\n'== エラー ==' | Add-Content daily-report.log\nGet-WinEvent -LogName System | Where-Object { $_.Level -eq 'エラー' } | ForEach-Object { $_.Message } | Add-Content daily-report.log", judge:'state',
-    chips:['== ディスク ==','|','Add-Content','daily-report.log','Get-PSDrive','Where-Object','{','}','$_.Free -lt 10GB','ForEach-Object','$_.Name','== エラー ==','Get-WinEvent','-LogName','System',"$_.Level -eq 'エラー'",'$_.Message'] },
+    request:'「ではレポートファイル daily-report.log を組み立てよう。レポートは毎回作り直すものだから、最初の1行（日付）は Set-Content で書く。次に見出し『== ディスク ==』を書いて、空きが 10GB より少ないドライブを『名前: 空き ○ GB』の形で書き、次に見出し『== エラー ==』を書いて、直近24時間のエラー以上（重大とエラー）のメッセージを全部書いてくれ」',
+    solution:"Set-Content daily-report.log \"レポート $(Get-Date -Format 'yyyy-MM-dd')\"\n'== ディスク ==' | Add-Content daily-report.log\nGet-PSDrive -PSProvider FileSystem | Where-Object { $_.Free -lt 10GB } | ForEach-Object { \"$($_.Name): 空き $([int]($_.Free / 1GB)) GB\" } | Add-Content daily-report.log\n'== エラー ==' | Add-Content daily-report.log\nGet-WinEvent -LogName System | Where-Object { ($_.Level -eq 1 -or $_.Level -eq 2) -and $_.TimeCreated -ge (Get-Date).AddDays(-1) } | ForEach-Object { $_.Message } | Add-Content daily-report.log", judge:'state',
+    clearMemo:'実務メモ： レポートは「作り直すもの」、ログや履歴は「追記するもの」。この区別が、追記で重複が積み上がる事故を防ぎます。空き容量のような数値が入って初めて、読んだ人が「どれくらい危ないか」を判断できます。',
+    chips:['Set-Content','daily-report.log','"レポート $(Get-Date -Format \'yyyy-MM-dd\')"','== ディスク ==','|','Add-Content','Get-PSDrive','-PSProvider','FileSystem','Where-Object','{','}','$_.Free -lt 10GB','ForEach-Object','"$($_.Name): 空き $([int]($_.Free / 1GB)) GB"','== エラー ==','Get-WinEvent','-LogName','System','($_.Level -eq 1 -or $_.Level -eq 2) -and $_.TimeCreated -ge (Get-Date).AddDays(-1)','$_.Message'] },
   { id:'rep-4', theme:'report', stage:4, title:'レポート作成を関数にする',
     request:'「この日次レポートの組み立てを、使い回せる関数にしてくれ。名前は New-DailyReport、引数 $File でレポートのファイル名を受け取る動きで。作ったら daily-report.log で実行してくれ」',
-    solution:"function New-DailyReport($File) { '== ディスク ==' | Add-Content $File; Get-PSDrive | Where-Object { $_.Free -lt 10GB } | ForEach-Object { $_.Name } | Add-Content $File; '== エラー ==' | Add-Content $File; Get-WinEvent -LogName System | Where-Object { $_.Level -eq 'エラー' } | ForEach-Object { $_.Message } | Add-Content $File }\nNew-DailyReport daily-report.log",
+    solution:"function New-DailyReport($File) {\n  Set-Content $File \"レポート $(Get-Date -Format 'yyyy-MM-dd')\"\n  '== ディスク ==' | Add-Content $File\n  Get-PSDrive -PSProvider FileSystem | Where-Object { $_.Free -lt 10GB } | ForEach-Object { \"$($_.Name): 空き $([int]($_.Free / 1GB)) GB\" } | Add-Content $File\n  '== エラー ==' | Add-Content $File\n  Get-WinEvent -LogName System | Where-Object { ($_.Level -eq 1 -or $_.Level -eq 2) -and $_.TimeCreated -ge (Get-Date).AddDays(-1) } | ForEach-Object { $_.Message } | Add-Content $File\n}\nNew-DailyReport daily-report.log",
     judge:'state', requireFunction:'New-DailyReport', hiddenTest:{ calls:['New-DailyReport -File weekly-report.log'], param:'$File' },
-    chips:['function','New-DailyReport','($File)','{','}','== ディスク ==','|','Add-Content','$File','Get-PSDrive','Where-Object','$_.Free -lt 10GB','ForEach-Object','$_.Name','== エラー ==','Get-WinEvent','-LogName','System',"$_.Level -eq 'エラー'",'$_.Message','daily-report.log'] },
+    chips:['function','New-DailyReport','($File)','{','}','Set-Content','$File','"レポート $(Get-Date -Format \'yyyy-MM-dd\')"','== ディスク ==','|','Add-Content','Get-PSDrive','-PSProvider','FileSystem','Where-Object','$_.Free -lt 10GB','ForEach-Object','"$($_.Name): 空き $([int]($_.Free / 1GB)) GB"','== エラー ==','Get-WinEvent','-LogName','System','($_.Level -eq 1 -or $_.Level -eq 2) -and $_.TimeCreated -ge (Get-Date).AddDays(-1)','$_.Message','daily-report.log'] },
   { id:'rep-5', theme:'report', stage:5, title:'日次レポートを自動化する',
-    request:'「段階4で作った関数 New-DailyReport を、毎朝の自動実行に登録しよう。ゲーム内コマンド Register-AutoRun に、実行したいコマンドを { } で囲んで渡してくれ。ファイル名は daily-report.log で。登録したら『1日進める』で翌朝へ進め、新しい状態でレポートが作られるか確かめよう」',
+    request:'「段階4で作った関数 New-DailyReport を、毎朝の自動実行に登録しよう。ゲーム内コマンド Register-AutoRun に、実行したいコマンドを { } で囲んで渡してくれ。ファイル名は daily-report.log で。登録したら『1日進める』で翌朝へ進め、新しい状態でレポートが作り直されるか確かめよう」',
     solution:'Register-AutoRun { New-DailyReport daily-report.log }', judge:'state',
-    preload:"function New-DailyReport($File) { '== ディスク ==' | Add-Content $File; Get-PSDrive | Where-Object { $_.Free -lt 10GB } | ForEach-Object { $_.Name } | Add-Content $File; '== エラー ==' | Add-Content $File; Get-WinEvent -LogName System | Where-Object { $_.Level -eq 'エラー' } | ForEach-Object { $_.Message } | Add-Content $File }",
+    preload:"function New-DailyReport($File) { Set-Content $File \"レポート $(Get-Date -Format 'yyyy-MM-dd')\"; '== ディスク ==' | Add-Content $File; Get-PSDrive -PSProvider FileSystem | Where-Object { $_.Free -lt 10GB } | ForEach-Object { \"$($_.Name): 空き $([int]($_.Free / 1GB)) GB\" } | Add-Content $File; '== エラー ==' | Add-Content $File; Get-WinEvent -LogName System | Where-Object { ($_.Level -eq 1 -or $_.Level -eq 2) -and $_.TimeCreated -ge (Get-Date).AddDays(-1) } | ForEach-Object { $_.Message } | Add-Content $File }",
     sim:{ label:'1日進める（自動実行）', pastText:'翌朝になりました', destName:'daily-report', home:'Events', failHint:'レポートの内容が期待と違います。空きが減ったドライブと、新しいエラーが入っているはずです', diskDeltas:[{Name:'G', dFreeGB:-5}], arrivals:[
-      {TimeCreatedDays:0, Time:'09:31', Id:7034, Level:'エラー', Source:'Service Control Manager', Message:'Print Spooler サービスが予期せず終了しました'},
-      {TimeCreatedDays:0, Time:'07:44', Id:1014, Level:'警告', Source:'DNS Client', Message:'名前 resolver.local の名前解決がタイムアウトしました'}
+      {TimeCreatedDays:0, Time:'09:31', Id:7034, Level:2, ProviderName:'Service Control Manager', Message:'Print Spooler サービスは予期せぬ原因により終了しました。このサービスの終了は 4 回目です。'},
+      {TimeCreatedDays:0, Time:'07:44', Id:1014, Level:3, ProviderName:'DNS Client', Message:'名前 resolver.local の名前解決がタイムアウトしました'}
     ]},
-    clearMemo:'実務メモ： Register-AutoRun はゲーム内専用コマンドです。実務ではタスクスケジューラに Register-ScheduledTask で登録し、レポートはメールで送ったり共有フォルダに置いたりして届けます。これで全10テーマ・50問が揃いました。手で打つ→パイプでつなぐ→条件で絞る→関数にする→自動で回す。この流れが身につけば、日常の運用はかなり楽になります。',
+    clearMemo:'実務メモ： Register-AutoRun はゲーム内専用コマンドです。実務ではタスクスケジューラに Register-ScheduledTask で登録し、レポートはメールで送ったり共有フォルダに置いたりして届けます。実務では、スクリプトファイル（.ps1）に保存したものを登録するのが本当の形で、実行ポリシーで止められることもあります。文字コードにも注意： Windows PowerShell 5.1 では書き出しの既定の文字コードがコマンドごとに違い、混ぜると日本語が文字化けします。-Encoding utf8 に揃えるのが安全です（PowerShell 7 の既定は UTF-8）。これで全10テーマ・50問が揃いました。手で打つ→パイプでつなぐ→条件で絞る→関数にする→自動で回す。この流れが身につけば、日常の運用はかなり楽になります。',
     chips:['Register-AutoRun','{','New-DailyReport daily-report.log','}'] }
+
 ];
 
 /* ================= interpreter ================= */
@@ -649,6 +668,8 @@ function tokenize(src){
     if (c === ' ' || c === '\t' || c === '\r'){ i++; continue; }
     if (c === '\n' || c === ';'){ toks.push({t:'sep'}); i++; continue; }
     if (c === '|'){ toks.push({t:'pipe'}); i++; continue; }
+    if (c === '@'){ toks.push({t:'@'}); i++; continue; }
+    if (c === '/'){ toks.push({t:'/'}); i++; continue; }
     if (c === '='){ toks.push({t:'='}); i++; continue; }
     if (c === '{' || c === '}' || c === '(' || c === ')' || c === ','){ toks.push({t:c}); i++; continue; }
     if (c === '.' && !/[0-9]/.test(src[i+1] || '')){ toks.push({t:'.'}); i++; continue; }
@@ -670,7 +691,8 @@ function tokenize(src){
       toks.push({t:'str', v:w}); i = j; continue; }
     if (c === '?'){ toks.push({t:'word', v:'?'}); i++; continue; }
     if (c === '['){ let j = i + 1; while (j < src.length && src[j] !== ']') j++; toks.push({t:'type'}); i = j + 1; continue; }
-    if (/[A-Za-z_]/.test(c) || c.charCodeAt(0) > 127){ let j = i, w = ''; while (j < src.length && (/[A-Za-z0-9_-]/.test(src[j]) || src[j].charCodeAt(0) > 127)){ w += src[j]; j++; }
+    if (/[A-Za-z_]/.test(c) || c.charCodeAt(0) > 127){ let j = i, w = ''; while (j < src.length && (/[A-Za-z0-9_-]/.test(src[j]) || src[j].charCodeAt(0) > 127 || (src[j] === '.' && /[A-Za-z0-9]/.test(src[j + 1] || '')))){ w += src[j]; j++; }
+      if (src[j] === ':'){ while (j < src.length && /[A-Za-z0-9_.*\\:\/-]/.test(src[j])){ w += src[j]; j++; } toks.push({t:'str', v:w}); i = j; continue; }
       if (src[j] === '\\'){ while (j < src.length && /[A-Za-z0-9_.*\\-]/.test(src[j])){ w += src[j]; j++; } toks.push({t:'str', v:w}); i = j; continue; }
       toks.push({t:'word', v:w}); i = j; continue; }
     throw new Error('読み取れない文字があります: ' + c);
@@ -715,6 +737,7 @@ function captureParens(cur){
   throw new Error('( に対応する ) がありません');
 }
 function runStatements(cur, env, ctx, input){
+  ctx.env = env;
   let value = input;
   while (!cur.done()){
     const tk = cur.peek();
@@ -724,7 +747,13 @@ function runStatements(cur, env, ctx, input){
     if (tk.t === 'word' && tk.v.toLowerCase() === 'if'){ value = parseIf(cur, env, ctx, value); continue; }
     if (tk.t === 'var' && cur.toks[cur.i + 1] && cur.toks[cur.i + 1].t === '='){
       cur.next(); cur.next();
-      ctx.vars[tk.v] = parseOr(cur, ctx);
+      const nxA = cur.peek();
+      if (nxA && nxA.t === 'word'){
+        const res = parsePipeline(cur, env, ctx, null);
+        ctx.vars[tk.v] = Array.isArray(res) ? (res.length === 1 ? res[0] : (res.length === 0 ? null : res)) : res;
+      } else {
+        ctx.vars[tk.v] = parseOr(cur, ctx);
+      }
       value = [];
       continue;
     }
@@ -795,8 +824,18 @@ function parsePipeline(cur, env, ctx, input){
   while (cur.peek() && cur.peek().t === 'pipe'){ cur.next(); value = execStage(cur, env, ctx, value, true); }
   return value;
 }
-const SWITCH_PARAMS = ['-descending', '-recurse', '-whatif'];
+const SWITCH_PARAMS = ['-descending', '-recurse', '-whatif', '-quiet'];
 const COMP_OPS = ['-gt','-ge','-lt','-le','-eq','-ne','-like'];
+function parseHash(toks){
+  const o = {}; let i = 0;
+  while (i < toks.length){
+    const k = toks[i];
+    if (k.t === 'sep'){ i++; continue; }
+    if (k.t === 'word'){ const key = k.v.toLowerCase(); i++; if (toks[i] && toks[i].t === '=') i++; const v = toks[i]; if (v) o[key] = v.v; i++; continue; }
+    i++;
+  }
+  return o;
+}
 function execStage(cur, env, ctx, input, piped){
   const nameTk = cur.next();
   if (!nameTk || nameTk.t !== 'word') throw new Error('コマンド名が必要です');
@@ -813,11 +852,12 @@ function execStage(cur, env, ctx, input, piped){
       const pkey = tk.v === '-desc' ? '-descending' : tk.v;
       if (SWITCH_PARAMS.includes(pkey)){ params[pkey] = true; continue; }
       const nx = cur.peek();
+      if (nx && nx.t === '@'){ cur.next(); params[pkey] = { __hash: parseHash(captureBlock(cur)) }; continue; }
       if (nx && (nx.t === 'word' || nx.t === 'str' || nx.t === 'num')){ cur.next(); params[pkey] = nx.v; continue; }
       if (nx && nx.t === 'var'){ cur.next(); params[pkey] = resolveVar(nx, null, ctx, cur); continue; }
       params[pkey] = true; continue;
     }
-    if (tk.t === 'word' || tk.t === 'str' || tk.t === 'num'){ cur.next(); positional.push(tk.v); continue; }
+    if (tk.t === 'word' || tk.t === 'str' || tk.t === 'num'){ cur.next(); positional.push(tk.t === 'str' && tk.dq ? interpolate(tk.v, ctx) : tk.v); continue; }
     if (tk.t === 'var'){ cur.next(); positional.push(resolveVar(tk, null, ctx, cur)); continue; }
     if (tk.t === '.'){ cur.next(); const w = cur.next(); positional.push('.' + (w ? w.v : '')); continue; }
     throw new Error('引数の読み取りで止まりました');
@@ -825,6 +865,7 @@ function execStage(cur, env, ctx, input, piped){
   return dispatch(name, positional, params, block, input, env, ctx, piped);
 }
 function propOf(obj, name){
+  if (Array.isArray(obj)) return obj.length === 1 ? propOf(obj[0], name) : (obj.length === 0 ? null : undefined);
   if (obj == null || typeof obj !== 'object') return undefined;
   const key = Object.keys(obj).find(k => k.toLowerCase() === String(name).toLowerCase());
   if (key !== undefined) return obj[key];
@@ -851,6 +892,19 @@ function likeMatch(value, pattern){
   const re = new RegExp('^' + String(pattern).replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.') + '$', 'i');
   return re.test(String(value));
 }
+function resolvePathItems(env, pathStr){
+  let path = String(pathStr), pattern = null;
+  if (path.includes('*')){
+    const cut = Math.max(path.lastIndexOf('\\'), path.lastIndexOf('/'));
+    if (cut >= 0){ pattern = path.slice(cut + 1); path = path.slice(0, cut); }
+    else { pattern = path; path = ''; }
+  }
+  const folder = Object.keys(env).find(k => k.toLowerCase() === path.toLowerCase());
+  if (!folder || !Array.isArray(env[folder])) throw new Error('フォルダ "' + pathStr + '" はありません');
+  let out = env[folder].slice();
+  if (pattern) out = out.filter(f => f && typeof f === 'object' && 'Name' in f && likeMatch(f.Name, pattern));
+  return out;
+}
 function dispatch(name, positional, params, block, input, env, ctx, piped){
   const lower = name.toLowerCase();
   const items = Array.isArray(input) ? input : (input == null ? [] : [input]);
@@ -864,17 +918,20 @@ function dispatch(name, positional, params, block, input, env, ctx, piped){
     if (params['-tail'] !== undefined) out = out.slice(-Number(params['-tail']));
     return out;
   }
-  if (lower === 'add-content'){
+  if (lower === 'add-content' || lower === 'set-content'){
     const fname = String(positional[0] || '');
     const base = fname.replace(/\.[^.]*$/, '').toLowerCase();
     let dest = Object.keys(env).find(k => k.toLowerCase() === base);
     if (!dest){ env[base] = []; dest = base; }
-    for (const it of items) env[dest].push(String(it));
+    const vals = items.length ? items.map(String) : positional.slice(1).map(String);
+    if (lower === 'set-content') env[dest] = vals;
+    else for (const it of vals) env[dest].push(it);
     return [];
   }
   if (lower === 'get-psdrive' || lower === 'gdr'){
     if (!env.Drives) throw new Error('このテーマでは Get-PSDrive は使えません');
-    return env.Drives.slice();
+    if (params['-psprovider'] !== undefined && String(params['-psprovider']).toLowerCase() === 'filesystem') return env.Drives.slice();
+    return env.Drives.concat(env.PSDrivesExtra || []);
   }
   if (lower === 'get-process' || lower === 'gps'){
     if (!env.Processes) throw new Error('このテーマでは Get-Process は使えません');
@@ -1043,11 +1100,15 @@ function dispatch(name, positional, params, block, input, env, ctx, piped){
   }
   if (lower === 'copy-item' || lower === 'cp' || lower === 'copy'){
     if (params['-whatif'] === true) return [];
-    const destName = params['-destination'] !== undefined ? params['-destination'] : undefined;
+    let destName = params['-destination'] !== undefined ? params['-destination'] : undefined;
+    let cpItems = items;
+    if (!cpItems.length && typeof positional[0] === 'string'){
+      cpItems = resolvePathItems(env, positional[0]);
+      if (destName === undefined && positional[1] !== undefined) destName = positional[1];
+    }
     if (destName === undefined) throw new Error('コピー先を指定してください（-Destination）');
     const dest = Object.keys(env).find(k => k.toLowerCase() === String(destName).toLowerCase());
     if (!dest) throw new Error('コピー先フォルダが見つかりません: ' + destName);
-    let cpItems = items;
     const ioC = params['-inputobject'];
     if (ioC && typeof ioC === 'object') cpItems = [ioC];
     if (!cpItems.length && positional[0] && typeof positional[0] === 'object' && 'Folder' in positional[0]) cpItems = [positional[0]];
@@ -1063,14 +1124,14 @@ function dispatch(name, positional, params, block, input, env, ctx, piped){
   if (lower === 'test-connection'){
     if (!env.Hosts) throw new Error('このテーマでは Test-Connection は使えません');
     let names = [];
-    if (piped) names = items.map(x => typeof x === 'string' ? x : (x && (x.Address || x.Name)));
+    if (piped) names = items.map(x => typeof x === 'string' ? x : (x && (x.Destination || x.Name)));
     else if (params['-computername'] !== undefined) names = [params['-computername']];
     else if (positional[0] !== undefined) names = [positional[0]];
     if (!names.length || names.some(n => n == null)) throw new Error('対象のサーバーを指定してください');
     const results = names.map(n => {
       const h = env.Hosts.find(x => x.Name.toLowerCase() === String(n).toLowerCase());
       if (!h) throw new Error('名前が解決できません: ' + n);
-      return { Name:h.Name, Address:h.Name, IPAddress:h.IPAddress, Status: h.Reachable ? 'Success' : 'TimedOut', ResponseTime: h.Reachable ? h.Latency : null };
+      return { Destination:h.Name, Address:h.IPAddress, IPAddress:h.IPAddress, Latency: h.Reachable ? h.Latency : null, Status: h.Reachable ? 'Success' : (h.DownStatus || 'TimedOut') };
     });
     if (params['-quiet'] === true) return results.map(r => r.Status === 'Success');
     return results;
@@ -1092,12 +1153,18 @@ function dispatch(name, positional, params, block, input, env, ctx, piped){
     if (!env.Events) throw new Error('このテーマでは Get-WinEvent は使えません');
     if (params['-logname'] !== undefined && String(params['-logname']).toLowerCase() !== 'system') throw new Error('このゲームで読めるのは System ログだけです');
     let out = env.Events.slice();
+    const fh = params['-filterhashtable'];
+    if (fh && fh.__hash){
+      if (fh.__hash.logname !== undefined && String(fh.__hash.logname).toLowerCase() !== 'system') throw new Error('このゲームで読めるのは System ログだけです');
+      if (fh.__hash.id !== undefined) out = out.filter(e => e.Id === Number(fh.__hash.id));
+      if (fh.__hash.level !== undefined) out = out.filter(e => e.Level === Number(fh.__hash.level));
+    }
     if (params['-maxevents'] !== undefined) out = out.slice(0, Number(params['-maxevents']));
     return out;
   }
-  if (lower === 'get-package'){
-    if (!env.Packages) throw new Error('このテーマでは Get-Package は使えません');
-    return env.Packages.slice().sort((a, b) => a.Name < b.Name ? -1 : 1);
+  if (lower === 'get-itemproperty'){
+    if (!env.Packages) throw new Error('このテーマでは Get-ItemProperty は使えません');
+    return env.Packages.slice();
   }
   if (lower === 'register-autorun'){
     if (block){ ctx.autoRun = { block }; return []; }
@@ -1150,11 +1217,16 @@ function parseAnd(cur, ctx){
   while (cur.peek() && cur.peek().t === 'param' && cur.peek().v === '-and'){ cur.next(); const r = parseCmp(cur, ctx); l = !!l && !!r; }
   return l;
 }
+function parseTerm(cur, ctx){
+  let l = parseOperand(cur, ctx);
+  while (cur.peek() && cur.peek().t === '/'){ cur.next(); const r = parseOperand(cur, ctx); l = l / r; }
+  return l;
+}
 function parseCmp(cur, ctx){
-  const l = parseOperand(cur, ctx);
+  const l = parseTerm(cur, ctx);
   const tk = cur.peek();
   if (tk && tk.t === 'param' && COMP_OPS.includes(tk.v)){
-    cur.next(); const r = parseOperand(cur, ctx);
+    cur.next(); const r = parseTerm(cur, ctx);
     return compareVals(l, tk.v, r);
   }
   return l;
@@ -1162,25 +1234,56 @@ function parseCmp(cur, ctx){
 function parseOperand(cur, ctx){
   const tk = cur.next();
   if (!tk) throw new Error('条件の右側がありません');
+  if (tk.t === 'param' && tk.v === '-not'){ const v = parseOperand(cur, ctx); return !v; }
+  if (tk.t === 'type'){ const v = parseOperand(cur, ctx); return (typeof v === 'number') ? Math.trunc(v) : v; }
   if (tk.t === 'neg'){ const v = parseOperand(cur, ctx); return (typeof v === 'number') ? -v : NaN; }
   if (tk.t === '('){
+    const nxP = cur.peek();
+    if (nxP && nxP.t === 'word' && /^[A-Za-z]+-[A-Za-z]+$/.test(nxP.v) && nxP.v.toLowerCase() !== 'get-date'){
+      const inner = []; let depth = 1;
+      while (!cur.done()){
+        const t2 = cur.next();
+        if (t2.t === '(') depth++;
+        if (t2.t === ')'){ depth--; if (depth === 0) break; }
+        inner.push(t2);
+      }
+      if (!ctx.env) throw new Error('内部エラー: env がありません');
+      const res = parsePipeline(new Cur(inner), ctx.env, ctx, null);
+      return Array.isArray(res) ? (res.length === 1 ? res[0] : (res.length === 0 ? null : res)) : res;
+    }
     let v = parseOr(cur, ctx);
     const close = cur.next(); if (!close || close.t !== ')') throw new Error(') が必要です');
     while (cur.peek() && cur.peek().t === '.'){
       cur.next(); const w = cur.next();
       if (!w || w.t !== 'word') throw new Error('メソッド名が必要です');
-      if (w.v.toLowerCase() !== 'adddays') throw new Error('このゲームで使えるメソッドは .AddDays() だけです');
-      const argToks = captureParens(cur);
-      const arg = parseOr(new Cur(argToks), ctx);
-      if (!v || typeof v !== 'object' || !('__date' in v)) throw new Error('.AddDays() は日付にだけ使えます');
-      v = { __date: v.__date + arg };
+      const meth = w.v.toLowerCase();
+      if (meth === 'adddays' || meth === 'addhours'){
+        const argToks = captureParens(cur);
+        const arg = parseOr(new Cur(argToks), ctx);
+        if (!v || typeof v !== 'object' || !('__date' in v)) throw new Error('.AddDays()/.AddHours() は日付にだけ使えます');
+        v = { __date: v.__date + (meth === 'addhours' ? arg / 24 : arg) };
+      } else if (meth === 'tostring'){
+        const argToks = captureParens(cur);
+        if (v && typeof v === 'object' && '__date' in v) v = fmtYMD(v.__date);
+        else v = String(v);
+      } else {
+        throw new Error('このゲームで使えるメソッドは .AddDays()/.AddHours()/.ToString() だけです');
+      }
     }
     return v;
   }
   if (tk.t === 'num') return tk.v;
   if (tk.t === 'str') return tk.dq ? interpolate(tk.v, ctx) : tk.v;
   if (tk.t === 'word'){
-    if (tk.v.toLowerCase() === 'get-date') return { __date: 0 };
+    if (tk.v.toLowerCase() === 'get-date'){
+      const nxF = cur.peek();
+      if (nxF && nxF.t === 'param' && nxF.v === '-format'){
+        cur.next(); const fv = cur.next(); const f = fv ? String(fv.v) : 'yyyy-MM-dd';
+        const d = new Date(); const p2 = n => String(n).padStart(2, '0');
+        return f.replace('yyyy', d.getFullYear()).replace('MM', p2(d.getMonth() + 1)).replace('dd', p2(d.getDate())).replace('HH', p2(d.getHours())).replace('mm', p2(d.getMinutes()));
+      }
+      return { __date: 0 };
+    }
     return tk.v;
   }
   if (tk.t === '.'){ const w = cur.next(); return '.' + (w ? w.v : ''); }
@@ -1208,11 +1311,23 @@ function parseForeachStmt(cur, env, ctx){
   }
   return value;
 }
+function strVal(v){
+  if (v == null) return '';
+  if (typeof v === 'object' && '__date' in v) return fmtDate(v);
+  return String(v);
+}
 function interpolate(s, ctx){
-  s = s.replace(/\$\(([^()]*)\)/g, (m, inner) => {
-    try { const v = parseOr(new Cur(tokenize(inner)), ctx); return v == null ? '' : String(v); }
-    catch (e) { return ''; }
-  });
+  let out = '', i = 0;
+  while (i < s.length){
+    if (s[i] === '$' && s[i + 1] === '('){
+      let depth = 1, j = i + 2;
+      while (j < s.length && depth > 0){ if (s[j] === '(') depth++; if (s[j] === ')') depth--; j++; }
+      const inner = s.slice(i + 2, j - 1);
+      try { out += strVal(parseOr(new Cur(tokenize(inner)), ctx)); } catch (e) {}
+      i = j;
+    } else { out += s[i]; i++; }
+  }
+  s = out;
   return s.replace(/\$([A-Za-z_][A-Za-z0-9_]*)/g, (m, name) => {
     let v;
     if (name === '_') v = ctx.currentItem;
@@ -1221,9 +1336,12 @@ function interpolate(s, ctx){
     return v == null ? '' : String(v);
   });
 }
+function fmtYMD(off){ const d = new Date(); d.setDate(d.getDate() + Math.round(off)); const p = n => String(n).padStart(2, '0'); return d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()); }
 function unwrapVal(v){ return (v && typeof v === 'object' && '__date' in v) ? v.__date : v; }
 function compareVals(l, op, r){
   if (op === '-like') return likeMatch(l, r);
+  if (Array.isArray(l)) l = l.length === 1 ? l[0] : (l.length === 0 ? null : l);
+  if (Array.isArray(r)) r = r.length === 1 ? r[0] : (r.length === 0 ? null : r);
   l = unwrapVal(l); r = unwrapVal(r);
   if (l == null || r == null){
     const bothNull = (l == null && r == null);
@@ -1251,7 +1369,8 @@ function compareVals(l, op, r){
 function itemName(x){
   if (x && typeof x === 'object'){
     if ('Name' in x) return x.Name;
-    if ('Message' in x) return x.Time + '|' + x.Level + '|' + x.Source + '|' + x.Message;
+    if ('Message' in x) return x.Time + '|' + x.Level + '|' + x.ProviderName + '|' + x.Message;
+    if ('DisplayName' in x) return x.DisplayName;
   }
   return String(x);
 }
@@ -1294,25 +1413,25 @@ function simulate(quest, env, ctx){
   if (sim.ageUsers) for (const u of env.Users || []) if (u.LastLogon && u.LastLogon.__date <= -15) u.LastLogon.__date -= sim.ageUsers;
   for (const d of sim.hostDeltas || []){ const h = (env.Hosts || []).find(x => x.Name === d.Name); if (h) for (const k of Object.keys(d)) if (k !== 'Name') h[k] = d[k]; }
   for (const nh of sim.newHosts || []) (env.Hosts || []).push({ ...nh, Ports: { ...(nh.Ports || {}) } });
-  if (sim.agePackages) for (const p of env.Packages || []) if (p.InstallDate) p.InstallDate.__date -= sim.agePackages;
+  if (sim.agePackages) for (const p of env.Packages || []) if (p.InstallDays != null){ p.InstallDays += sim.agePackages; p.InstallDate = fmtYMD(-p.InstallDays); }
   if (sim.ageEvents) for (const e of env.Events || []) if (e.TimeCreated) e.TimeCreated.__date -= sim.ageEvents;
   if (ctx.autoRun && ctx.autoRun.block) runStatements(new Cur(ctx.autoRun.block), env, ctx, null);
   else if (ctx.autoRun) invokeFunction(ctx, env, ctx.autoRun.func, ctx.autoRun.args || [], ctx.autoRun.named);
 }
-function sigOf(it){
+function sigOf(it, withDate){
   if (it && typeof it === 'object'){
     if ('TcpTestSucceeded' in it) return itemName(it) + ':' + it.RemotePort + ':' + it.TcpTestSucceeded;
     if ('Level' in it && 'Id' in it) return it.Level + ':' + it.Id + ':' + (it.TimeCreated ? it.TimeCreated.__date : '');
     if ('Status' in it) return itemName(it) + ':' + it.Status;
     if ('Enabled' in it) return itemName(it) + ':' + it.Enabled;
-    if ('Length' in it) return itemName(it) + ':' + it.Length;
+    if ('Length' in it) return itemName(it) + ':' + it.Length + (withDate && it.LastWriteTime ? ':' + it.LastWriteTime.__date : '');
     return itemName(it);
   }
   return String(it);
 }
 function stateSnapshot(env){
   const o = {};
-  for (const f of Object.keys(env)) o[f] = env[f].map(sigOf).slice().sort();
+  for (const f of Object.keys(env)) o[f] = env[f].map(x => sigOf(x, true)).slice().sort();
   return o;
 }
 function outputSignature(output){
@@ -1545,12 +1664,12 @@ function hostsHtml(env){
   return h;
 }
 function packagesHtml(env){
-  return '<div class="folder">📦 インストール済みソフト</div><table>' + env.Packages.slice().sort((a, b) => a.Name < b.Name ? -1 : 1).map(p =>
-    `<tr><td class="n">${p.Name}</td><td class="r">${p.Version}</td><td class="r">${p.Publisher}</td></tr>`).join('') + '</table>';
+  return '<div class="folder">📦 インストール済みソフト（レジストリのアンインストール情報）</div><table>' + env.Packages.map(p =>
+    `<tr><td class="n">${p.DisplayName}</td><td class="r">${p.DisplayVersion}</td><td class="r">${p.Publisher}</td></tr>`).join('') + '</table>';
 }
 function eventsHtml(env){
   return '<div class="folder">⚠️ イベントログ（System）</div><table>' + env.Events.map(e =>
-    `<tr><td class="n">${fmtDate(e.TimeCreated)} ${e.Time}</td><td class="r">${e.Level}</td><td class="r">ID:${e.Id}</td><td class="r">${e.Message}</td></tr>`).join('') + '</table>';
+    `<tr><td class="n">${fmtDate(e.TimeCreated)} ${e.Time}</td><td class="r">${e.LevelDisplayName}</td><td class="r">ID:${e.Id}</td><td class="r">${e.Message}</td></tr>`).join('') + '</table>';
 }
 function openQuest(q){
   currentQuest = q;
@@ -1599,8 +1718,8 @@ const KBD = {
   ],
   sym: [
     ['1','2','3','4','5','6','7','8','9','0'],
-    ['|','$','_','{','}','(',')','-','=','*'],
-    ["'",'"','.',',',':','/','%','\\','[',']','?'],
+    ['|','$','_','{','}','(',')','-','=','*','@'],
+    ["'",'"','.',',',':','/','%','\\','[',']','?',';'],
     [{t:'ABC', act:'page', cls:'wide'}, {t:'$_', ins:'$_'}, {t:'', act:'space', cls:'space'}, {t:'⌫', act:'bs'}, {t:'改行', act:'enter', cls:'wide'}]
   ]
 };
@@ -1654,17 +1773,17 @@ function formatOutput(output){
   if (!output || !output.length) return '<span class="dim">（出力なし）</span>';
   return output.map(it => {
     if (it && typeof it === 'object' && '_count' in it) return 'Count : ' + it._count;
-    if (it && typeof it === 'object' && 'Used' in it) return `${it.Name} ドライブ　使用 ${fmtGB(it.Used)}　空き ${fmtGB(it.Free)}`;
+    if (it && typeof it === 'object' && 'Used' in it) return it.Free == null ? `${it.Name}　（${it.Provider || 'PSDrive'}）` : `${it.Name} ドライブ　使用 ${fmtGB(it.Used)}　空き ${fmtGB(it.Free)}`;
     if (it && typeof it === 'object' && 'WS' in it) return `${it.Name}　メモリ ${fmtMB(it.WS)}　CPU ${it.CPU}`;
-    if (it && typeof it === 'object' && 'Level' in it && 'Id' in it) return `${fmtDate(it.TimeCreated)} ${it.Time}　${it.Level}　ID:${it.Id}　${it.Message}`;
-    if (it && typeof it === 'object' && 'Version' in it && 'Publisher' in it) return `${it.Name}　${it.Version}　${it.Publisher}`;
+    if (it && typeof it === 'object' && 'Level' in it && 'Id' in it) return `${fmtDate(it.TimeCreated)} ${it.Time}　${it.LevelDisplayName}　ID:${it.Id}　${it.Message}`;
+    if (it && typeof it === 'object' && 'DisplayVersion' in it && 'Publisher' in it) return `${it.DisplayName}　${it.DisplayVersion}　${it.Publisher}`;
     if (it && typeof it === 'object' && 'TcpTestSucceeded' in it) return `${it.ComputerName}　ポート ${it.RemotePort}　${it.TcpTestSucceeded ? '接続OK' : '接続できません'}`;
     if (it && typeof it === 'object' && 'PingSucceeded' in it) return `${it.ComputerName}　ping ${it.PingSucceeded ? 'Success' : 'TimedOut'}`;
-    if (it && typeof it === 'object' && 'Status' in it && 'IPAddress' in it) return `${it.Address}　${it.IPAddress}　${it.Status}${it.ResponseTime != null ? '　' + it.ResponseTime + 'ms' : ''}`;
+    if (it && typeof it === 'object' && 'Status' in it && 'IPAddress' in it) return `${it.Destination}　${it.Address}　${it.Status}${it.Latency != null ? '　' + it.Latency + 'ms' : ''}`;
     if (it && typeof it === 'object' && 'Status' in it) return `${it.Name}　${it.Status}`;
     if (it && typeof it === 'object' && 'Enabled' in it) return `${it.Name}　${it.Enabled ? 'True' : 'False'}　${it.Description || ''}`;
     if (it && typeof it === 'object' && 'Name' in it) return `${it.Name}　${fmtSize(it.Length)}　${fmtDate(it.LastWriteTime)}`;
-    if (it && typeof it === 'object' && 'Message' in it) return `${it.Time}　${it.Level}　${it.Source}　${it.Message}`;
+    if (it && typeof it === 'object' && 'Message' in it) return `${it.Time}　${it.LevelDisplayName}　${it.ProviderName}　${it.Message}`;
     return String(it);
   }).join('\n');
 }
