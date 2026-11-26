@@ -228,22 +228,22 @@ function makeDiskEnv(){
 /* ---- theme: process ---- */
 const MB = 1024 * 1024;
 function baseProcesses(){ return [
-  {Name:'sqlservr',       Id:1200, WS:2400, CPU:1500.5},
-  {Name:'chrome',         Id:2400, WS:1200, CPU:820.3},
   {Name:'backup-agent',   Id:3100, WS:640,  CPU:120.0},
-  {Name:'Teams',          Id:3300, WS:580,  CPU:300.2},
-  {Name:'svchost',        Id:900,  WS:180,  CPU:45.0},
+  {Name:'chrome',         Id:2400, WS:1200, CPU:820.3},
   {Name:'explorer',       Id:4100, WS:150,  CPU:60.5},
+  {Name:'notepad',        Id:4800, WS:25,   CPU:1.2},
   {Name:'powershell',     Id:4600, WS:90,   CPU:12.4},
-  {Name:'notepad',        Id:4800, WS:25,   CPU:1.2}
+  {Name:'sqlservr',       Id:1200, WS:2400, CPU:1500.5},
+  {Name:'svchost',        Id:900,  WS:180,  CPU:45.0},
+  {Name:'Teams',          Id:3300, WS:580,  CPU:300.2}
 ];}
 function baseServices(){ return [
-  {Name:'Spooler',       Status:'Running'},
-  {Name:'W32Time',       Status:'Stopped'},
-  {Name:'BackupService', Status:'Running'},
-  {Name:'MonitorAgent',  Status:'Stopped'},
-  {Name:'UpdateService', Status:'Stopped'},
-  {Name:'WinRM',         Status:'Running'}
+  {Name:'BackupService', Status:'Stopped', StartType:'Automatic'},
+  {Name:'MonitorAgent',  Status:'Stopped', StartType:'Automatic'},
+  {Name:'Spooler',       Status:'Running', StartType:'Automatic'},
+  {Name:'UpdateService', Status:'Stopped', StartType:'Disabled'},
+  {Name:'W32Time',       Status:'Stopped', StartType:'Manual'},
+  {Name:'WinRM',         Status:'Running', StartType:'Manual'}
 ];}
 function toProcess(d){ return { Name:d.Name, Id:d.Id, WS:d.WS * MB, CPU:d.CPU }; }
 function makeProcessEnv(){
@@ -274,8 +274,8 @@ const QUESTS = [
     chips:['Get-ChildItem','Downloads','|','Where-Object','{','}','$_','.Length','-gt','100KB','Sort-Object','-Descending'] },
   { id:'files-3', theme:'files', stage:3, title:'古いファイルを仕分ける',
     request:'「90日以上前のファイルを片付けてくれ。一時ファイル（.tmp）は Trash へ、それ以外は Archive へ移動だ。最近のものは手つかずで頼む」',
-    solution:"Get-ChildItem Downloads | ForEach-Object { if ($_.LastWriteTime -le (Get-Date).AddDays(-90)) { if ($_.Extension -eq '.tmp') { Move-Item -Destination Trash } else { Move-Item -Destination Archive } } }", judge:'state',
-    chips:['Get-ChildItem','Downloads','|','ForEach-Object','{','}','if ($_.LastWriteTime -le (Get-Date).AddDays(-90))',"if ($_.Extension -eq '.tmp')",'else','Move-Item','-Destination','Trash','Archive'] },
+    solution:"Get-ChildItem Downloads | ForEach-Object { if ($_.LastWriteTime -le (Get-Date).AddDays(-90)) { if ($_.Extension -eq '.tmp') { $_ | Move-Item -Destination Trash } else { $_ | Move-Item -Destination Archive } } }", judge:'state',
+    chips:['Get-ChildItem','Downloads','|','ForEach-Object','{','}','if ($_.LastWriteTime -le (Get-Date).AddDays(-90))',"if ($_.Extension -eq '.tmp')",'else','$_','Move-Item','-Destination','Trash','Archive'] },
   { id:'files-4', theme:'files', stage:4, title:'片付けを関数にする',
     request:'「毎月の片付けを、使い回せる関数にしてくれ。名前は Move-OldFile、日数は引数 $Days で受け取って、Downloads の中で $Days 日以上前のファイルをすべて Archive へ移動する動きで。作ったら 180日 で実行してくれ」',
     solution:'function Move-OldFile($Days) { Get-ChildItem Downloads | Where-Object { $_.LastWriteTime -le (Get-Date).AddDays(-$Days) } | Move-Item -Destination Archive }\nMove-OldFile 180',
@@ -348,7 +348,7 @@ const QUESTS = [
     clearMemo:'実務メモ： Register-AutoRun はゲーム内専用コマンドです。実務ではタスクスケジューラに Register-ScheduledTask で登録します。なお、New-ScheduledTaskTrigger には毎月の指定がないため、毎月実行はタスクスケジューラの画面や schtasks /sc monthly で設定します。あと、実物の Get-PSDrive はファイルシステム以外（レジストリや環境変数など）のドライブも返します。ディスクだけを見たいときは Get-PSDrive -PSProvider FileSystem と指定します。',
     chips:['Register-AutoRun','{','Check-DiskSpace -Limit 10GB','}'] },
   { id:'proc-1', theme:'process', stage:1, title:'動いているプロセスを全部見る',
-    request:'「このPCで今動いているプロセスを全部見せてくれ」',
+    request:'「開発用PCで今動いているプロセスを全部見せてくれ」',
     solution:'Get-Process', judge:'output',
     chips:['Get-Process'] },
   { id:'proc-2', theme:'process', stage:2, title:'メモリを食うプロセス',
@@ -356,23 +356,24 @@ const QUESTS = [
     solution:'Get-Process | Where-Object { $_.WS -gt 500MB } | Sort-Object WS -Descending', judge:'output',
     chips:['Get-Process','|','Where-Object','{','}','$_.WS -gt 500MB','Sort-Object','WS','-Descending'] },
   { id:'proc-3', theme:'process', stage:3, title:'止まっているサービスを起こす',
-    request:'「サービスの一覧で、止まっている（Stopped）ものがあったら全部起動してくれ。1つずつ調べて、止まっているものだけだ」',
-    solution:"Get-Service | ForEach-Object { if ($_.Status -eq 'Stopped') { Start-Service } }", judge:'state',
-    chips:['Get-Service','|','ForEach-Object','{','}',"if ($_.Status -eq 'Stopped')",'Start-Service'] },
+    request:'「自動起動（Automatic）のはずなのに止まっている（Stopped）サービスがあったら、起動してくれ。1つずつ調べて、条件に合うものだけだ。手動（Manual）や無効（Disabled）のものは、止まっているのが普通だから触らなくていい」',
+    solution:"Get-Service | ForEach-Object { if ($_.Status -eq 'Stopped' -and $_.StartType -eq 'Automatic') { Start-Service -Name $_.Name } }", judge:'state',
+    clearMemo:'実務では、Get-Service | Where-Object { $_.Status -eq \'Stopped\' -and $_.StartType -eq \'Automatic\' } | Start-Service という1行で書くのが定番です（状態で絞って、そのままパイプで渡す形）。',
+    chips:['Get-Service','|','ForEach-Object','{','}',"if ($_.Status -eq 'Stopped' -and $_.StartType -eq 'Automatic')",'Start-Service -Name $_.Name'] },
   { id:'proc-4', theme:'process', stage:4, title:'重いプロセス止めを関数にする',
-    request:'「メモリを食いすぎるプロセスを止める処理を、使い回せる関数にしてくれ。名前は Stop-HungryProcess、引数 $Limit で『WS がこれより大きいプロセスを止める』という境界を受け取る動きで。作ったら 1GB で実行してくれ」',
-    solution:'function Stop-HungryProcess($Limit) { Get-Process | Where-Object { $_.WS -gt $Limit } | Stop-Process }\nStop-HungryProcess 1GB',
+    request:'「メモリを食いすぎるプロセスを止める処理を、使い回せる関数にしてくれ。名前は Stop-HungryProcess、引数 $Limit で『WS がこれより大きいプロセスを止める』という境界を受け取る動きで。ただし sqlservr は基幹のデータベースだから、どれだけ大きくても絶対に止めるな。作ったら 1GB で実行してくれ」',
+    solution:"function Stop-HungryProcess($Limit) { Get-Process | Where-Object { $_.WS -gt $Limit -and $_.Name -ne 'sqlservr' } | Stop-Process }\nStop-HungryProcess 1GB",
     judge:'state', requireFunction:'Stop-HungryProcess', hiddenTest:{ calls:['Stop-HungryProcess -Limit 500MB'], param:'$Limit' },
-    chips:['function','Stop-HungryProcess','($Limit)','{','}','Get-Process','|','Where-Object','$_.WS -gt $Limit','Stop-Process','1GB'] },
+    chips:['function','Stop-HungryProcess','($Limit)','{','}','Get-Process','|','Where-Object','$_.WS -gt $Limit','-and',"$_.Name -ne 'sqlservr'",'Stop-Process','1GB'] },
   { id:'proc-5', theme:'process', stage:5, title:'重いプロセス止めを自動化する',
     request:'「段階4で作った関数 Stop-HungryProcess を、毎時の自動実行に登録しよう。ゲーム内コマンド Register-AutoRun に、実行したいコマンドを { } で囲んで渡してくれ。境界は 1GB で。登録したら『1時間進める』で次の1時間へ進め、新しく重くなったプロセスも自動で止まるか確かめよう」',
     solution:'Register-AutoRun { Stop-HungryProcess -Limit 1GB }', judge:'state',
-    preload:'function Stop-HungryProcess($Limit) { Get-Process | Where-Object { $_.WS -gt $Limit } | Stop-Process }',
-    sim:{ label:'1時間進める（自動実行）', pastText:'1時間が経ちました', destName:'Processes', home:'Processes', goneFrom:'Processes', goneLabel:'自動実行で止まったプロセス：', failHint:'残っているプロセスが期待と違います。新しく現れた重いプロセスも対象です', arrivals:[
+    preload:"function Stop-HungryProcess($Limit) { Get-Process | Where-Object { $_.WS -gt $Limit -and $_.Name -ne 'sqlservr' } | Stop-Process }",
+    sim:{ label:'1時間進める（自動実行）', pastText:'1時間が経ちました', destName:'Processes', home:'Processes', goneFrom:'Processes', goneLabel:'自動実行で止まったプロセス：', failHint:'残っているプロセスが期待と違います。新しく現れた重いプロセスも対象です。sqlservr は大きくても止めません', arrivals:[
       {Name:'report-generator', Id:5100, WS:1800, CPU:400.0},
       {Name:'photo-editor', Id:5200, WS:300, CPU:50.0}
     ]},
-    clearMemo:'実務メモ： Register-AutoRun はゲーム内専用コマンドです。実務ではタスクスケジューラに Register-ScheduledTask で登録します。あと、実務でプロセスを止めるときは、業務への影響を先に確認するのが鉄則です（このゲームの sqlservr のような基幹プロセスは特に）。',
+    clearMemo:'実務メモ： Register-AutoRun はゲーム内専用コマンドです。実務ではタスクスケジューラに Register-ScheduledTask で登録します。あと、他ユーザーのプロセスを止めるときは -Force がないと確認を求められ、自動実行では止まってしまうことがあります。止めたら記録を残すのも実務の作法です。sqlservr のような基幹は、メモリが大きくても止めないのが鉄則です。',
     chips:['Register-AutoRun','{','Stop-HungryProcess -Limit 1GB','}'] }
 ];
 
@@ -457,13 +458,24 @@ function runStatements(cur, env, ctx, input){
     if (tk.t === 'word' && tk.v.toLowerCase() === 'function'){ parseFunctionDef(cur, ctx); value = []; continue; }
     if (tk.t === 'word' && tk.v.toLowerCase() === 'if'){ value = parseIf(cur, env, ctx, value); continue; }
     if (tk.t === 'var' || tk.t === 'num' || tk.t === 'str' || tk.t === '('){
-      value = parseOr(cur, ctx);
+      const v0 = parseOr(cur, ctx);
+      if (cur.peek() && cur.peek().t === 'pipe'){
+        value = [v0];
+        while (cur.peek() && cur.peek().t === 'pipe'){ cur.next(); value = execStage(cur, env, ctx, value, true); }
+      } else {
+        value = v0;
+        const nx2 = cur.peek();
+        if (nx2 && nx2.t !== 'sep' && nx2.t !== '}') throw new Error('文の区切りが分かりません');
+      }
       ctx.output = Array.isArray(value) ? value : [value];
-      const nx2 = cur.peek();
-      if (nx2 && nx2.t !== 'sep' && nx2.t !== '}') throw new Error('文の区切りが分かりません');
       continue;
     }
-    value = parsePipeline(cur, env, ctx, value);
+    if (tk.t === 'word' && tk.v.toLowerCase() === 'foreach' && cur.toks[cur.i + 1] && cur.toks[cur.i + 1].t === '('){
+      value = parseForeachStmt(cur, env, ctx);
+      ctx.output = Array.isArray(value) ? value : [value];
+      continue;
+    }
+    value = parsePipeline(cur, env, ctx, null);
     ctx.output = value;
     const nx = cur.peek();
     if (nx && nx.t !== 'sep' && nx.t !== '}') throw new Error('文の区切りが分かりません');
@@ -508,13 +520,13 @@ function parseFunctionDef(cur, ctx){
   ctx.functions[nameTk.v] = { params, body };
 }
 function parsePipeline(cur, env, ctx, input){
-  let value = execStage(cur, env, ctx, input);
-  while (cur.peek() && cur.peek().t === 'pipe'){ cur.next(); value = execStage(cur, env, ctx, value); }
+  let value = execStage(cur, env, ctx, input, input != null);
+  while (cur.peek() && cur.peek().t === 'pipe'){ cur.next(); value = execStage(cur, env, ctx, value, true); }
   return value;
 }
 const SWITCH_PARAMS = ['-descending', '-recurse', '-whatif'];
 const COMP_OPS = ['-gt','-ge','-lt','-le','-eq','-ne','-like'];
-function execStage(cur, env, ctx, input){
+function execStage(cur, env, ctx, input, piped){
   const nameTk = cur.next();
   if (!nameTk || nameTk.t !== 'word') throw new Error('コマンド名が必要です');
   const name = nameTk.v;
@@ -539,12 +551,14 @@ function execStage(cur, env, ctx, input){
     if (tk.t === '.'){ cur.next(); const w = cur.next(); positional.push('.' + (w ? w.v : '')); continue; }
     throw new Error('引数の読み取りで止まりました');
   }
-  return dispatch(name, positional, params, block, input, env, ctx);
+  return dispatch(name, positional, params, block, input, env, ctx, piped);
 }
 function propOf(obj, name){
   if (obj == null || typeof obj !== 'object') return undefined;
   const key = Object.keys(obj).find(k => k.toLowerCase() === String(name).toLowerCase());
-  return key !== undefined ? obj[key] : undefined;
+  if (key !== undefined) return obj[key];
+  if (String(name).toLowerCase() === 'workingset64' && 'WS' in obj) return obj.WS;
+  return undefined;
 }
 function canonFolder(name){
   return FOLDERS.find(f => f.toLowerCase() === String(name).toLowerCase());
@@ -563,7 +577,7 @@ function likeMatch(value, pattern){
   const re = new RegExp('^' + String(pattern).replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.') + '$', 'i');
   return re.test(String(value));
 }
-function dispatch(name, positional, params, block, input, env, ctx){
+function dispatch(name, positional, params, block, input, env, ctx, piped){
   const lower = name.toLowerCase();
   const items = Array.isArray(input) ? input : (input == null ? [] : [input]);
   if (lower === 'get-content' || lower === 'gc' || lower === 'cat' || lower === 'type'){
@@ -586,18 +600,37 @@ function dispatch(name, positional, params, block, input, env, ctx){
   }
   if (lower === 'get-process' || lower === 'gps'){
     if (!env.Processes) throw new Error('このテーマでは Get-Process は使えません');
-    return env.Processes.slice();
+    return env.Processes.slice().sort((a, b) => a.Name.toLowerCase() < b.Name.toLowerCase() ? -1 : 1);
   }
   if (lower === 'get-service' || lower === 'gsv'){
     if (!env.Services) throw new Error('このテーマでは Get-Service は使えません');
-    return env.Services.slice();
+    return env.Services.slice().sort((a, b) => a.Name.toLowerCase() < b.Name.toLowerCase() ? -1 : 1);
   }
   if (lower === 'start-service'){
+    if (params['-whatif'] === true) return [];
+    if (!env.Services) throw new Error('このテーマでは Start-Service は使えません');
+    const targetName = params['-name'] !== undefined ? params['-name'] : (typeof positional[0] === 'string' ? positional[0] : undefined);
+    if (targetName !== undefined){
+      const svc = env.Services.find(s => s.Name.toLowerCase() === String(targetName).toLowerCase());
+      if (!svc) throw new Error('サービスが見つかりません: ' + targetName);
+      svc.Status = 'Running';
+      return [];
+    }
+    if (!piped) throw new Error('起動するサービスを指定してください（-Name か、パイプで渡してください）');
     for (const it of items) if (it && typeof it === 'object' && 'Status' in it) it.Status = 'Running';
     return [];
   }
   if (lower === 'stop-process'){
-    if (env.Processes) for (const it of items){
+    if (params['-whatif'] === true) return [];
+    if (!env.Processes) throw new Error('このテーマでは Stop-Process は使えません');
+    const targetName = params['-name'] !== undefined ? params['-name'] : (typeof positional[0] === 'string' ? positional[0] : undefined);
+    if (targetName !== undefined){
+      for (let i = env.Processes.length - 1; i >= 0; i--)
+        if (env.Processes[i].Name.toLowerCase() === String(targetName).toLowerCase()) env.Processes.splice(i, 1);
+      return [];
+    }
+    if (!piped) throw new Error('止めるプロセスを指定してください（パイプか -Name で指定してください）');
+    for (const it of items){
       const i = env.Processes.indexOf(it);
       if (i >= 0) env.Processes.splice(i, 1);
     }
@@ -679,6 +712,7 @@ function dispatch(name, positional, params, block, input, env, ctx){
     if (params['-whatif'] === true) return [];
     let mvItems = items;
     if (!mvItems.length && positional[0] && typeof positional[0] === 'object' && 'Folder' in positional[0]) mvItems = [positional[0]];
+    if (!piped && !mvItems.length) throw new Error('移動するファイルを指定してください（パイプで渡すか、$_ を渡してください）');
     for (const it of mvItems){
       if (!it || typeof it !== 'object' || !('Folder' in it)) continue;
       const srcArr = env[it.Folder]; const idx = srcArr.indexOf(it);
@@ -689,6 +723,7 @@ function dispatch(name, positional, params, block, input, env, ctx){
   }
   if (lower === 'remove-item' || lower === 'del' || lower === 'rm' || lower === 'ri'){
     if (params['-whatif'] === true) return [];
+    if (!piped && !items.length && !positional.length) throw new Error('削除する対象を指定してください');
     for (const it of items){
       if (!it || typeof it !== 'object' || !('Folder' in it)) continue;
       const arr = env[it.Folder]; const idx = arr.indexOf(it);
@@ -791,7 +826,30 @@ function parseOperand(cur, ctx){
   }
   throw new Error('条件の読み取りで止まりました');
 }
+function parseForeachStmt(cur, env, ctx){
+  cur.next(); // 'foreach'
+  const inner = captureParens(cur);
+  const varTk = inner.find(t => t.t === 'var');
+  const inIdx = inner.findIndex(t => t.t === 'word' && t.v.toLowerCase() === 'in');
+  if (!varTk || inIdx < 0) throw new Error('foreach 文の形が読み取れません（foreach ($x in コマンド) { }）');
+  const items = parsePipeline(new Cur(inner.slice(inIdx + 1)), env, ctx, null);
+  const block = captureBlock(cur);
+  let value = [];
+  for (const it of (Array.isArray(items) ? items : [items])){
+    const savedItem = ctx.currentItem;
+    const hadVar = varTk.v in ctx.vars; const savedVar = ctx.vars[varTk.v];
+    ctx.currentItem = it; ctx.vars[varTk.v] = it;
+    value = runStatements(new Cur(block), env, ctx, [it]);
+    ctx.currentItem = savedItem;
+    if (hadVar) ctx.vars[varTk.v] = savedVar; else delete ctx.vars[varTk.v];
+  }
+  return value;
+}
 function interpolate(s, ctx){
+  s = s.replace(/\$\(([^()]*)\)/g, (m, inner) => {
+    try { const v = parseOr(new Cur(tokenize(inner)), ctx); return v == null ? '' : String(v); }
+    catch (e) { return ''; }
+  });
   return s.replace(/\$([A-Za-z_][A-Za-z0-9_]*)/g, (m, name) => {
     let v;
     if (name === '_') v = ctx.currentItem;
@@ -1060,7 +1118,7 @@ function processHtml(env){
   let h = '<div class="folder">⚙️ プロセス</div><table>' + env.Processes.map(p =>
     `<tr><td class="n">${p.Name}</td><td class="r">ID ${p.Id}</td><td class="r">メモリ ${fmtMB(p.WS)}</td></tr>`).join('') + '</table>';
   h += '<div class="folder">🧩 サービス</div><table>' + env.Services.map(s =>
-    `<tr><td class="n">${s.Name}</td><td class="r">${s.Status === 'Running' ? '🟢 Running' : '🔴 Stopped'}</td></tr>`).join('') + '</table>';
+    `<tr><td class="n">${s.Name}</td><td class="r">${s.StartType}</td><td class="r">${s.Status === 'Running' ? '🟢 Running' : '🔴 Stopped'}</td></tr>`).join('') + '</table>';
   return h;
 }
 function openQuest(q){
@@ -1111,7 +1169,7 @@ const KBD = {
   sym: [
     ['1','2','3','4','5','6','7','8','9','0'],
     ['|','$','_','{','}','(',')','-','=','*'],
-    ["'",'"','.',',',':','/','%','\\','[',']'],
+    ["'",'"','.',',',':','/','%','\\','[',']','?'],
     [{t:'ABC', act:'page', cls:'wide'}, {t:'$_', ins:'$_'}, {t:'', act:'space', cls:'space'}, {t:'⌫', act:'bs'}, {t:'改行', act:'enter', cls:'wide'}]
   ]
 };
@@ -1226,7 +1284,7 @@ $('btn-run').addEventListener('click', () => {
   if (r.pass){
     markCleared(q);
     seOk();
-    feedback('✔ クリア！ 依頼どおりの結果になりました。', true);
+    feedback('✔ クリア！ 依頼どおりの結果になりました。' + (q.clearMemo ? '<br><span style="font-size:12.5px;color:var(--sub)">' + q.clearMemo + '</span>' : ''), true);
     const next = QUESTS.find(x => x.theme === q.theme && x.stage === q.stage + 1);
     if (next){ const b = $('btn-next'); b.classList.remove('hidden'); b.onclick = () => openQuest(next); }
   } else if (r.code === 'hidden-named'){
